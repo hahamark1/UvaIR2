@@ -8,10 +8,11 @@ N_UTTERANCES_FOR_INPUT = 3
 class Vocabulary():
 
 	def __init__(self):
+		self.padding_token = '__PADDING__'
 		self.split_token = '__SU__'
-		self.word2index = {self.split_token: 0}
+		self.word2index = {self.padding_token: 0, self.split_token: 1}
 		self.word2count = {}
-		self.index2word = {0: self.split_token}
+		self.index2word = {0: self.padding_token, 1: self.split_token}
 		self.n_words = 1
 
 	def add_word(self, word):
@@ -119,7 +120,7 @@ class DailyDialogLoader(Dataset):
 				for j in range(self.n_utterances_for_input):
 					input_combination = input_combination + dialogue[i+j]
 					if j != self.n_utterances_for_input - 1:
-						input_combination.append(0)
+						input_combination.append(self.vocabulary.word2index[self.vocabulary.split_token])
 				inputs.append(torch.tensor(input_combination))
 				targets.append(torch.tensor(dialogue[i+self.n_utterances_for_input]))
 
