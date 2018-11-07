@@ -7,7 +7,9 @@ PATH_TO_DATA = '../data/dailydialog/train/dialogues_train.txt'
 
 
 dd_loader = DailyDialogLoader(PATH_TO_DATA)
-dataloader = DataLoader(dd_loader, batch_size=2, shuffle=False, num_workers=4, collate_fn=PadCollate())
+
+# Play with the batch size if you want:
+dataloader = DataLoader(dd_loader, batch_size=4, shuffle=True, num_workers=4, collate_fn=PadCollate())
 
 for i, input_target_pair in enumerate(dataloader):
 	print('\ninput:')
