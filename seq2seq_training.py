@@ -17,11 +17,9 @@ from torch import optim
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 
-from model import *
-from dataloader_lang import *
-from seq2seq_helper_funcs import *
-from DailyDialogLoader import DailyDialogLoader
-from DailyDialogLoader import PadCollate
+from models.model import *
+from utils.seq2seq_helper_funcs import *
+from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
 
 PATH_TO_DATA = 'data/dailydialog/train/dialogues_train.txt'
 
@@ -79,7 +77,7 @@ def train(input_tensor, target_tensor, encoder, decoder, encoder_optimizer, deco
 
     return loss.item() / target_length
 
-def trainIters(input_lang, output_lang, encoder, decoder, n_iters, print_every=1000, plot_every=100, learning_rate=0.01):
+def trainIters(dataloader, encoder, decoder, n_iters, print_every=1000, plot_every=100, learning_rate=0.01):
     start = time.time()
     plot_losses = []
     print_loss_total = 0  # Reset every print_every
@@ -87,13 +85,9 @@ def trainIters(input_lang, output_lang, encoder, decoder, n_iters, print_every=1
 
     encoder_optimizer = optim.SGD(encoder.parameters(), lr=learning_rate)
     decoder_optimizer = optim.SGD(decoder.parameters(), lr=learning_rate)
-    training_pairs = [tensorsFromPair(input_lang, output_lang, random.choice(pairs)) for i in range(n_iters)]
     criterion = nn.NLLLoss()
 
-    for iter in range(1, n_iters + 1):
-        training_pair = training_pairs[iter - 1]
-        input_tensor = training_pair[0]
-        target_tensor = training_pair[1]
+    for i, (input_tensor, target_tensor) in enumerate(dataloader):
 
         loss = train(input_tensor, target_tensor, encoder,
                      decoder, encoder_optimizer, decoder_optimizer, criterion)
@@ -159,12 +153,13 @@ def evaluateRandomly(encoder, decoder, n=10):
         print('')
 
 dd_loader = DailyDialogLoader(PATH_TO_DATA)
-dataloader = DataLoader(dd_loader, batch_size=4, shuffle=True, num_workers=4, collate_fn=PadCollate())
+dataloader = DataLoader(dd_loader, batch_size=1, shuffle=True, num_workers=4, collate_fn=PadCollate())
+
 
 hidden_size = 512
-encoder1 = EncoderRNN(input_lang.n_words, hidden_size).to(device)
-attn_decoder1 = AttnDecoderRNN(hidden_size, output_lang.n_words, dropout_p=0.1).to(device)
+encoder1 = EncoderRNN(dd_loader.n_inputs, hidden_size).to(device)
+attn_decoder1 = AttnDecoderRNN(hidden_size, dd_loader.n_outputs, dropout_p=0.1).to(device)
 
-trainIters(input_lang, output_lang, encoder1, attn_decoder1, 100000, print_every=1000)
+trainIters(dataloader, encoder1, attn_decoder1, 100000, print_every=1000)
 
 evaluateRandomly(encoder1, attn_decoder1)
