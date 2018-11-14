@@ -53,9 +53,6 @@ class DailyDialogLoader(Dataset):
 		self.convert_to_onehot()
 		self.split_inputs_targets()
 
-		self.n_inputs = len(self.inputs[0])
-		self.n_outputs = len(self.targets[0])
-
 	def __len__(self):
 		# Needed for the PyTorch DataLoader, returns the length of the dataset
 		return len(self.inputs)
