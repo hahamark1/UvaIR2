@@ -1,19 +1,76 @@
 import torch
 from torch.utils.data import Dataset
+import unicodedata
+import string
+import re
+
+import sys
+sys.path.append("..")
+from constants import PADDING_TOKEN, SPLIT_TOKEN, UNK_TOKEN, SOS_TOKEN, EOS_TOKEN, NUM_TOKEN, CONTRACTIONS
 
 
 N_UTTERANCES_FOR_INPUT = 3
 
 
+def unicodeToAscii(s):
+	"""
+	:param s: a string, example 'Joris is the beste'
+	:return: string in Ascii format
+	"""
+	return ''.join(
+        c for c in unicodedata.normalize('NFD', s)
+        if unicodedata.category(c) != 'Mn'
+    )
+
+def normalizeString(s):
+	"""
+	:param s: string
+	:return: string s
+	"""
+	s = unicodeToAscii(s.lower().strip())
+
+	s = re.sub("’", "'", s)
+	s = re.sub(" ’ ", "'", s)
+
+	# Replace contractions
+	for word in s.split():
+		if word.lower() in CONTRACTIONS:
+			s = s.replace(word, CONTRACTIONS[word.lower()])
+
+	# Remove punctuation
+	exclude = set(string.punctuation)
+	exclude.add("’")
+	exclude.add("£")
+	exclude.add("$")
+	s = ''.join(ch for ch in s if ch not in exclude)
+
+	# Remove double spaces
+	s = re.sub("  ", " ", s)
+
+	# Replace with __eou__
+	s = re.sub(" eou", " __eou__", s)
+
+	# Replace digits
+	s = re.sub('\d+', NUM_TOKEN, s)
+	s = ' '.join(s.split())
+	return s.lower()
+
+
 class Vocabulary():
 
 	def __init__(self):
-		self.padding_token = '__PADDING__'
-		self.split_token = '__SU__'
-		self.word2index = {self.padding_token: 0, self.split_token: 1}
+
+		self.padding_token = PADDING_TOKEN
+		self.split_token = SPLIT_TOKEN
+		self.unk_token = UNK_TOKEN
+		self.sos_token = SOS_TOKEN
+		self.eos_token = EOS_TOKEN
+		self.num_token = NUM_TOKEN
+
+		self.word2index = {self.padding_token: 0, self.split_token: 1, self.unk_token: 2, self.sos_token: 3, self.eos_token: 4, self.num_token: 5}
 		self.word2count = {}
-		self.index2word = {0: self.padding_token, 1: self.split_token}
-		self.n_words = 1
+		self.index2word = {0: self.padding_token, 1: self.split_token, 2: self.unk_token, 3: self.sos_token, 4: self.eos_token, 5:self.num_token}
+		self.n_words = 6
 
 	def add_word(self, word):
 		if word not in self.word2index:
@@ -78,7 +135,8 @@ class DailyDialogLoader(Dataset):
 			dialogues = []
 
 			for line in lines:
-				words = line.split(' ')
+
+				words = normalizeString(line).split(' ')
 
 				# Find all the indices of the split token __eou__ (end of utterance)
 				split_indices = [i for i, x in enumerate(words) if x == '__eou__' or x == '__eou__\n']
@@ -86,7 +144,7 @@ class DailyDialogLoader(Dataset):
 				split_indices.insert(0, -1)
 
 				# For each index, get the split of the words list until that index (a bit of magic with +1's to get rid of the split token)
-				utterances = [words[x+1:split_indices[i+1]] for i, x in enumerate(split_indices[:-1])]
+				utterances = [words[x + 1:split_indices[i + 1]] for i, x in enumerate(split_indices[:-1])]
 				dialogues.append(utterances)
 
 		self.dialogues = dialogues
@@ -136,6 +194,9 @@ class PadCollate:
 	a batch of sequences
 	"""
 
+	def __init__(self, pad_front=True):
+		self.pad_front = pad_front
+
 	def pad_collate(self, batch):
 		"""
 		args:
@@ -172,7 +233,22 @@ class PadCollate:
 		"""
 		pad_size = list(vec.shape)
 		pad_size[0] = pad - vec.size(0)
-		return torch.cat([vec, torch.zeros(*pad_size).type(torch.LongTensor)], dim=0)
+
+		vec = vec.type(torch.LongTensor)
+
+		if self.pad_front:
+			return torch.cat([torch.zeros(*pad_size).type(torch.LongTensor), vec], dim=0)
+		else:
+			return torch.cat([vec, torch.zeros(*pad_size).type(torch.LongTensor)], dim=0)
+
 
 	def __call__(self, batch):
 		return self.pad_collate(batch)
+
+
+if __name__ == '__main__':
+
+	from torch.utils.data import Dataset, DataLoader
+
+	DDL = DailyDialogLoader('../data/dailydialog/train/dialogues_train.txt')
+	dataloader = DataLoader(DDL, batch_size=15, shuffle=True, num_workers=0, collate_fn=PadCollate(pad_front=False))
