@@ -95,7 +95,7 @@ def trainIters(generator, dataloader, num_epochs=30, print_every=100,
                 real_test_sentence = dataloader.dataset.vocabulary.tokens_to_sent(test_sentence)
                 real_target_sentence = dataloader.dataset.vocabulary.tokens_to_sent(test_target_sentence)
 
-                decoded_words = evaluate(encoder, decoder, test_sentence)
+                decoded_words = evaluate(generator.encoder, generator.decoder, test_sentence)
                 generated_sentence = dataloader.dataset.vocabulary.list_to_sent(decoded_words)
 
                 print(real_test_sentence)
@@ -106,8 +106,7 @@ def trainIters(generator, dataloader, num_epochs=30, print_every=100,
                 print('-----------------------------')
 
             if n_iters % save_every == 0 and n_iters > 0:
-                torch.save(encoder, os.path.join('saved_models', 'encoder.pt'))
-                torch.save(decoder, os.path.join('saved_models', 'decoder.pt'))
+                torch.save(generator, os.path.join('saved_models', 'generator.pt'))
 
         plot_loss_avg = plot_loss_total / num_iters
         plot_losses.append(plot_loss_avg)
