@@ -50,9 +50,8 @@ def train(input_tensor, target_tensor, generator, optimizer, criterion, max_leng
     return loss.item() / target_length
 
 
-def trainIters(generator, dataloader, num_epochs=30, print_every=100,
-               plot_every=100, evaluate_every=100, save_every=100,
-               learning_rate=0.01):
+def trainIters(generator, dataloader, num_epochs=30, plot_every=100,
+               evaluate_every=100, save_every=100, learning_rate=0.01):
 
     start = time.time()
     plot_losses = []
@@ -60,6 +59,7 @@ def trainIters(generator, dataloader, num_epochs=30, print_every=100,
     plot_loss_total = 0  # Reset every plot_every
 
     optimizer = optim.RMSprop(generator.parameters(), lr=learning_rate)
+    scheduler = optim.lr_scheduler.StepLR(optimzer, step_size=3 gamma=0.8)
     criterion = nn.CrossEntropyLoss(ignore_index=0, size_average=False)
 
     num_iters = len(dataloader)
@@ -68,7 +68,7 @@ def trainIters(generator, dataloader, num_epochs=30, print_every=100,
     for epoch in range(num_epochs):
 
         for i, (input_tensor, target_tensor) in enumerate(dataloader):
-            n_iters += 1
+
 
             input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
 
@@ -76,12 +76,6 @@ def trainIters(generator, dataloader, num_epochs=30, print_every=100,
 
             print_loss_total += loss
             plot_loss_total += loss
-
-            if n_iters % print_every == 0 and n_iters > 0:
-                print_loss_avg = print_loss_total / print_every
-                print_loss_total = 0
-                print('{} Epoch:[{}/{}] Iter:[{}/{}] Loss: {}'.format(timeSince(start, float(n_iters) / n_iters),
-                                                                      epoch, num_epochs, i, len(dataloader), print_loss_avg))
 
             if n_iters % plot_every == 0 and n_iters > 0:
                 plot_loss_avg = plot_loss_total / plot_every
@@ -108,6 +102,10 @@ def trainIters(generator, dataloader, num_epochs=30, print_every=100,
             if n_iters % save_every == 0 and n_iters > 0:
                 torch.save(generator, os.path.join('saved_models', 'generator.pt'))
 
+            n_iters += 1
+
+        scheduler.step()
+
         plot_loss_avg = plot_loss_total / num_iters
         plot_losses.append(plot_loss_avg)
         plot_loss_total = 0
@@ -115,12 +113,11 @@ def trainIters(generator, dataloader, num_epochs=30, print_every=100,
 
     showPlot(plot_losses)
 
-def evaluate(encoder, decoder, input_tensor, max_length=20):
+def evaluate(encoder, decoder, input_tensor, max_length=MAX_LENGTH):
     with torch.no_grad():
 
-        input_length = max(input_tensor.size())
-
         input_tensor = input_tensor.view(1, -1)
+        input_length = input_tensor.shape[1]
 
         encoder_outputs = torch.zeros(max_length, 1, encoder.hidden_size, device=DEVICE)
         encoder_hidden = None
