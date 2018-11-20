@@ -10,7 +10,7 @@ sys.path.append("..")
 from constants import *
 
 
-N_UTTERANCES_FOR_INPUT = 3
+N_UTTERANCES_FOR_INPUT = 4
 
 
 def unicodeToAscii(s):

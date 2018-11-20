@@ -50,7 +50,7 @@ def train(input_tensor, target_tensor, generator, optimizer, criterion, max_leng
     return loss.item() / target_length
 
 
-def trainIters(generator, dataloader, num_epochs=30, plot_every=100,
+def trainIters(generator, dataloader, num_epochs=3000, plot_every=100,
                evaluate_every=100, save_every=100, learning_rate=0.01):
 
     start = time.time()
@@ -59,7 +59,7 @@ def trainIters(generator, dataloader, num_epochs=30, plot_every=100,
     plot_loss_total = 0  # Reset every plot_every
 
     optimizer = optim.RMSprop(generator.parameters(), lr=learning_rate)
-    scheduler = optim.lr_scheduler.StepLR(optimzer, step_size=3 gamma=0.8)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=0.9)
     criterion = nn.CrossEntropyLoss(ignore_index=0, size_average=False)
 
     num_iters = len(dataloader)
@@ -159,4 +159,4 @@ if __name__ == '__main__':
 
     generator = Generator(encoder1, attn_decoder1, criterion=nn.NLLLoss(ignore_index=0, size_average=False))
 
-    trainIters(generator, dataloader, print_every=100, save_every=100)
+    trainIters(generator, dataloader, save_every=100)
