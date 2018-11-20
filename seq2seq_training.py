@@ -43,21 +43,15 @@ def tensorsFromPair(pair, language):
 def train(input_tensor, target_tensor, generator, discriminator, optimizer, criterion, max_length=MAX_LENGTH):
 
     optimizer.zero_grad()
-    print('input', input_tensor.shape)
     input_length = input_tensor.shape[1]
     loss, generated_sentence = generator(input_tensor, target_tensor)
-    print('sentence', generated_sentence.shape)
+    generated_disc_loss = discriminator(input_tensor, generated_sentence, true_sample=False)
+    true_disc_loss = discriminator(input_tensor, target_tensor, true_sample=True)
 
-    batch_size = input_tensor.shape[0]
-    disc_hidden = discriminator.initHidden(batch_size=batch_size)
-    disc_outputs = torch.zeros(max_length, batch_size, discriminator.hidden_size, device=DEVICE)
-
-    for ei in range(input_length):
-        discriminator_output, disc_hidden = discriminator(generated_sentence[:, ei], disc_hidden)
-        disc_outputs[ei, :, :] = discriminator_output[0, :, :]
-
-    print('discriminator output', disc_outputs.shape)
-    sdfsf
+    print('generated_disc_output:', generated_disc_output.shape)
+    print('true_disc_output:', true_disc_output.shape)
+    
+    # TODO: add discriminator loss as well
     loss.backward()
     optimizer.step()
     target_length = target_tensor.shape[1]
@@ -163,7 +157,7 @@ def evaluate(encoder, decoder, input_tensor, max_length=20):
 
             decoder_input = topi.detach()
 
-        print(decoded_words)
+        # print(decoded_words)
         return decoded_words
 
 if __name__ == '__main__':
@@ -175,8 +169,10 @@ if __name__ == '__main__':
     hidden_size = 256
     encoder1 = EncoderRNN(dd_loader.vocabulary.n_words, hidden_size).to(DEVICE)
     attn_decoder1 = DecoderRNN(hidden_size, dd_loader.vocabulary.n_words).to(DEVICE)
-
     generator = Generator(encoder1, attn_decoder1, criterion=nn.NLLLoss(ignore_index=0, size_average=False))
-    discriminator = Discriminator(input_size=dd_loader.vocabulary.n_words, hidden_size=hidden_size)
+
+    disc_encoder = EncoderRNN(dd_loader.vocabulary.n_words, hidden_size).to(DEVICE)
+    disc_decoder = DecoderRNN(hidden_size, dd_loader.vocabulary.n_words).to(DEVICE)
+    discriminator = Discriminator(encoder=disc_encoder, decoder=disc_decoder)
 
     trainIters(generator, discriminator, dataloader, print_every=100, save_every=100)
