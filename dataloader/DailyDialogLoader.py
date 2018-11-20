@@ -10,7 +10,7 @@ sys.path.append("..")
 from constants import *
 
 
-N_UTTERANCES_FOR_INPUT = 4
+N_UTTERANCES_FOR_INPUT = 3
 
 
 def unicodeToAscii(s):
@@ -125,8 +125,13 @@ class DailyDialogLoader(Dataset):
 		self.sos_token = SOS_TOKEN
 		self.eos_token = EOS_TOKEN
 
+		# Init the self.dialogues
+		self.dialogues = []
+
 		# Execute the functions to load the data
-		self.read_txt()
+		self.read_txt(utterance_length=N_UTTERANCES_FOR_INPUT)
+		self.read_txt(utterance_length=N_UTTERANCES_FOR_INPUT+1)
+		self.read_txt(utterance_length=N_UTTERANCES_FOR_INPUT+2)
 		self.fill_vocabulary()
 		self.convert_to_onehot()
 		self.split_inputs_targets()
@@ -144,7 +149,7 @@ class DailyDialogLoader(Dataset):
 		# Needed for the PyTorch DataLoader, returns an [input, target] pair given an index
 		return self.inputs[idx], self.targets[idx]
 
-	def read_txt(self):
+	def read_txt(self, utterance_length=N_UTTERANCES_FOR_INPUT):
 		# Reads a txt file, returns a list of dialogues, consisting of lists of utterances, consisting of words
 		# Example
 		# 		-the whole thing consists of two dialogues
@@ -166,22 +171,22 @@ class DailyDialogLoader(Dataset):
 
 				utterances = words.split(' {} '.format(self.eou_token))
 
-				if len(utterances) < self.n_utterances_for_input+1:
+				if len(utterances) < utterance_length+1:
 					continue
 
-				for index in range(0, len(utterances)-self.n_utterances_for_input - 1):
+				for index in range(0, len(utterances)-utterance_length - 1):
 
-					question = ' {} '.format(self.eou_token).join(utterances[index:index+self.n_utterances_for_input])
+					question = ' {} '.format(self.eou_token).join(utterances[index:index+utterance_length])
 					question = '{} {}'.format(self.sos_token, question).strip()
 
-					target = utterances[index + self.n_utterances_for_input + 1]
+					target = utterances[index + utterance_length + 1]
 					target = '{} {}'.format(target, self.eos_token).strip()
 
 					dialogues.append((question, target))
 
 		dialogues = filterPairs(dialogues)
 
-		self.dialogues = dialogues
+		self.dialogues += dialogues
 
 	def fill_vocabulary(self):
 		# Fill the vocabulary of the Vocabulary class

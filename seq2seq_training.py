@@ -53,13 +53,8 @@ def train(input_tensor, target_tensor, generator, optimizer, criterion, max_leng
 def trainIters(generator, dataloader, num_epochs=3000, print_every=100,
                evaluate_every=100, save_every=100, learning_rate=0.001):
 
-    start = time.time()
-    plot_losses = []
-    print_loss_total = 0  # Reset every print_every
-    plot_loss_total = 0  # Reset every plot_every
-
     optimizer = optim.RMSprop(generator.parameters(), lr=learning_rate)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=0.9)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.9)
 
     num_iters = len(dataloader)
     iter = 0
