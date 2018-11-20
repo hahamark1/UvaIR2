@@ -45,8 +45,8 @@ def train(input_tensor, target_tensor, generator, discriminator, optimizer, crit
     optimizer.zero_grad()
     input_length = input_tensor.shape[1]
     loss, generated_sentence = generator(input_tensor, target_tensor)
-    generated_disc_loss = discriminator(input_tensor, generated_sentence, true_sample=False)
-    true_disc_loss = discriminator(input_tensor, target_tensor, true_sample=True)
+    generated_disc_loss, _ = discriminator(input_tensor, generated_sentence, true_sample=False)
+    true_disc_loss, _ = discriminator(input_tensor, target_tensor, true_sample=True)
 
     print('generated_disc_loss:', generated_disc_loss)
     print('true_disc_loss:', true_disc_loss)
@@ -173,6 +173,6 @@ if __name__ == '__main__':
 
     disc_encoder = EncoderRNN(dd_loader.vocabulary.n_words, hidden_size).to(DEVICE)
     disc_decoder = DecoderRNN(hidden_size, dd_loader.vocabulary.n_words).to(DEVICE)
-    discriminator = Discriminator(encoder=disc_encoder, decoder=disc_decoder)
+    discriminator = Discriminator(encoder=disc_encoder, decoder=disc_decoder, vocab_size=dd_loader.vocabulary.n_words)
 
     trainIters(generator, discriminator, dataloader, print_every=100, save_every=100)
