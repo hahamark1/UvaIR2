@@ -48,8 +48,8 @@ def train(input_tensor, target_tensor, generator, discriminator, optimizer, crit
     generated_disc_loss = discriminator(input_tensor, generated_sentence, true_sample=False)
     true_disc_loss = discriminator(input_tensor, target_tensor, true_sample=True)
 
-    print('generated_disc_output:', generated_disc_output.shape)
-    print('true_disc_output:', true_disc_output.shape)
+    print('generated_disc_loss:', generated_disc_loss)
+    print('true_disc_loss:', true_disc_loss)
     
     # TODO: add discriminator loss as well
     loss.backward()
