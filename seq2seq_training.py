@@ -7,6 +7,7 @@ Created on Wed Nov  7 13:56:42 2018
 
 import torch
 from models.model import AttnDecoderRNN, EncoderRNN, DecoderRNN, Generator
+from models.Discriminator import Discriminator
 import random
 import time
 from utils.seq2seq_helper_funcs import showPlot, asMinutes, timeSince
@@ -39,10 +40,24 @@ def tensorsFromPair(pair, language):
     return (input_tensor, target_tensor)
 
 
-def train(input_tensor, target_tensor, generator, optimizer, criterion, max_length=MAX_LENGTH):
+def train(input_tensor, target_tensor, generator, discriminator, optimizer, criterion, max_length=MAX_LENGTH):
 
     optimizer.zero_grad()
-    loss = generator(input_tensor, target_tensor)
+    print('input', input_tensor.shape)
+    input_length = input_tensor.shape[1]
+    loss, generated_sentence = generator(input_tensor, target_tensor)
+    print('sentence', generated_sentence.shape)
+
+    batch_size = input_tensor.shape[0]
+    disc_hidden = discriminator.initHidden(batch_size=batch_size)
+    disc_outputs = torch.zeros(max_length, batch_size, discriminator.hidden_size, device=DEVICE)
+
+    for ei in range(input_length):
+        discriminator_output, disc_hidden = discriminator(generated_sentence[:, ei], disc_hidden)
+        disc_outputs[ei, :, :] = discriminator_output[0, :, :]
+
+    print('discriminator output', disc_outputs.shape)
+    sdfsf
     loss.backward()
     optimizer.step()
     target_length = target_tensor.shape[1]
@@ -50,7 +65,7 @@ def train(input_tensor, target_tensor, generator, optimizer, criterion, max_leng
     return loss.item() / target_length
 
 
-def trainIters(generator, dataloader, num_epochs=30, print_every=100,
+def trainIters(generator, discriminator, dataloader, num_epochs=30, print_every=100,
                plot_every=100, evaluate_every=100, save_every=100,
                learning_rate=0.01):
 
@@ -72,7 +87,7 @@ def trainIters(generator, dataloader, num_epochs=30, print_every=100,
 
             input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
 
-            loss = train(input_tensor, target_tensor, generator, optimizer, criterion)
+            loss = train(input_tensor, target_tensor, generator, discriminator, optimizer, criterion)
 
             print_loss_total += loss
             plot_loss_total += loss
@@ -125,7 +140,7 @@ def evaluate(encoder, decoder, input_tensor, max_length=20):
         encoder_outputs = torch.zeros(max_length, 1, encoder.hidden_size, device=DEVICE)
         encoder_hidden = None
 
-        for ei in range(input_length):
+        for ei in range(min(input_length, max_length)):
             encoder_output, encoder_hidden = encoder(input_tensor[:, ei], encoder_hidden)
             encoder_outputs[ei, :, :] = encoder_output[0, :, :]
 
@@ -137,6 +152,7 @@ def evaluate(encoder, decoder, input_tensor, max_length=20):
 
         for di in range(MAX_WORDS_GEN):
             decoder_output, decoder_hidden, _ = decoder(decoder_input, decoder_hidden, encoder_outputs)
+            
             topv, topi = decoder_output.data.topk(1)
 
             if topi.item() == EOS_INDEX:
@@ -161,5 +177,6 @@ if __name__ == '__main__':
     attn_decoder1 = DecoderRNN(hidden_size, dd_loader.vocabulary.n_words).to(DEVICE)
 
     generator = Generator(encoder1, attn_decoder1, criterion=nn.NLLLoss(ignore_index=0, size_average=False))
+    discriminator = Discriminator(input_size=dd_loader.vocabulary.n_words, hidden_size=hidden_size)
 
-    trainIters(generator, dataloader, print_every=100, save_every=100)
+    trainIters(generator, discriminator, dataloader, print_every=100, save_every=100)

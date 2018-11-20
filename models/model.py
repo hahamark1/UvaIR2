@@ -22,7 +22,6 @@ class Generator(nn.Module):
         target_length = target_tensor.shape[1]
 
         encoder_hidden = self.encoder.initHidden(batch_size=batch_size)
-
         encoder_outputs = torch.zeros(self.max_length, batch_size, self.encoder.hidden_size, device=DEVICE)
 
         loss = 0
@@ -35,14 +34,22 @@ class Generator(nn.Module):
         decoder_input = torch.tensor([[SOS_INDEX] * batch_size], device=DEVICE).transpose(0, 1)
 
         decoder_hidden = encoder_hidden
+        generator_output = torch.zeros(target_length, batch_size)
 
         use_teacher_forcing = True if random.random() < TEACHER_FORCING_RATIO else False
+
 
         if use_teacher_forcing:
             # Teacher forcing: Feed the target as the next input
             for di in range(target_length):
                 decoder_output, decoder_hidden, decoder_attention = self.decoder(
                     decoder_input, decoder_hidden, encoder_outputs)
+                topv, topi = decoder_output.data.topk(1)
+
+                # probabilties = torch.exp(topv.view(-1))
+                # if di > 0:
+                    # probabilties *= rewards[di - 1, :]
+                # rewards[di, :] = probabilties
                 loss += self.criterion(decoder_output, target_tensor[:, di])
                 decoder_input = target_tensor[:, di]  # Teacher forcing
 
@@ -52,11 +59,18 @@ class Generator(nn.Module):
                 decoder_output, decoder_hidden, decoder_attention = self.decoder(
                     decoder_input, decoder_hidden, encoder_outputs)
                 topv, topi = decoder_output.topk(1)
+                # probabilties = torch.exp(topv.view(-1))
+                # if di > 0:
+                #     probabilties *= rewards[di - 1, :]
+                # rewards[di, :] = probabilties
+                generator_output[di, :] = topi.view(-1)
+
                 decoder_input = topi.squeeze().detach()  # detach from history as input
 
                 loss += self.criterion(decoder_output, target_tensor[:, di])
-
-        return loss
+        
+        generator_output = generator_output.view(batch_size, target_length)
+        return loss, generator_output
 
 class EncoderRNN(nn.Module):
     def __init__(self, input_size, hidden_size):
@@ -69,6 +83,7 @@ class EncoderRNN(nn.Module):
 
     def forward(self, input, hidden):
         batch_size = input.shape[0]
+        print('input', input.shape)
         embedded = self.embedding(input).view(1, batch_size, -1)
         output = embedded
         output, hidden = self.gru(output, hidden)
@@ -81,6 +96,7 @@ class DecoderRNN(nn.Module):
     def __init__(self, hidden_size, output_size):
         super(DecoderRNN, self).__init__()
         self.hidden_size = hidden_size
+        self.output_size = output_size
 
         self.embedding = nn.Embedding(output_size, hidden_size)
         self.gru = nn.GRU(hidden_size, hidden_size)
@@ -118,6 +134,7 @@ class AttnDecoderRNN(nn.Module):
 
         self.relu = nn.ReLU()
         self.log_softmax = nn.LogSoftmax(dim=2)
+        self.softmax = nn.Softmax(dim=2)
 
     def forward(self, input, hidden, encoder_outputs):
         batch_size = input.shape[0]
@@ -142,7 +159,7 @@ class AttnDecoderRNN(nn.Module):
 
         output, hidden = self.gru(output, hidden)
 
-        output = self.log_softmax(self.out(output))
+        output = self.softmax(self.out(output))
         output = output.squeeze(0)
 
         return output, hidden, attn_weights
