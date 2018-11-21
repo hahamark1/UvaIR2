@@ -112,7 +112,8 @@ def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, pr
 
         epoch_loss_avg = epoch_loss / i
         print('After epoch {} the loss is {}'.format(epoch, epoch_loss_avg))
-        evaluate_test_set(generator, test_dataloader)
+        average_score = evaluate_test_set(generator, test_dataloader)
+        print('After epoch {} the average Blue score of the test set is: {}'.format(epoch, average_score))
 
 
 def evaluate(encoder, decoder, input_tensor, max_length=MAX_LENGTH):

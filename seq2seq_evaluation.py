@@ -5,7 +5,7 @@ from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
 from torch.utils.data import Dataset, DataLoader
 from evaluation.BlueEvaluator import BlueEvaluator
 
-def load_model(length=30):
+def load_model(length=MAX_UTTERENCE_LENGTH):
     """ Load the model if it is available"""
 
     return torch.load(os.path.join(PATH_TO_SAVE, 'generator_{}.pt'.format(length))).to(DEVICE)
@@ -57,7 +57,7 @@ def evaluate_test_set(generator, test_dataloader, max_length=MAX_LENGTH):
             scores.append(score)
 
     average_score = sum(scores) / len(scores)
-    print('The average Blue score of the test set is: {}'.format((average_score)))
+    return average_score
 
 
 if __name__ == '__main__':
