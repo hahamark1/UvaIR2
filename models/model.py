@@ -58,7 +58,8 @@ class Generator(nn.Module):
                 decoder_input = topi.squeeze().detach()  # detach from history as input
                 loss += self.criterion(decoder_output, target_tensor[:, di])
         
-        generator_output = generator_output.view(batch_size, target_length)
+        # generator_output = generator_output.view(batch_size, target_length)
+        generator_output = generator_output.permute(1, 0)
         return loss, generator_output
 
 class EncoderRNN(nn.Module):

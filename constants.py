@@ -1,12 +1,12 @@
 import torch
 
 MAX_WORDS_encoder = 150
-MAX_WORDS_GEN = 20
+MAX_WORDS_GEN = 10
 
 # Cuda constants
 DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
-MAX_UTTERENCE_LENGTH = 30
+MAX_UTTERENCE_LENGTH = 25
 MAX_LENGTH = 35
 
 TEACHER_FORCING_RATIO = 0.0
