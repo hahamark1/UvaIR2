@@ -3,6 +3,7 @@ from torch.utils.data import Dataset
 import unicodedata
 import string
 import re
+from collections import defaultdict
 
 import sys
 sys.path.append("..")
@@ -67,6 +68,7 @@ class Vocabulary():
 		self.eos_token = EOS_TOKEN
 		self.num_token = NUM_TOKEN
 
+		self.word2index = defaultdict(lambda: UNK_TOKEN)
 		self.word2index = {self.padding_token: 0, self.split_token: 1, self.unk_token: 2, self.sos_token: 3, self.eos_token: 4, self.num_token: 5}
 		self.word2count = {}
 		self.index2word = {0: self.padding_token, 1: self.split_token, 2: self.unk_token, 3: self.sos_token, 4: self.eos_token, 5:self.num_token}
