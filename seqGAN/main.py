@@ -1,12 +1,6 @@
 from __future__ import print_function
 from math import ceil
-import numpy as np
 import sys
-import pdb
-
-import torch
-import torch.optim as optim
-import torch.nn as nn
 
 import generator
 import discriminator
@@ -22,9 +16,9 @@ VOCAB_SIZE = 5000
 MAX_SEQ_LEN = 20
 START_LETTER = 0
 BATCH_SIZE = 32
-MLE_TRAIN_EPOCHS = 2
-ADV_TRAIN_EPOCHS = 1
-ADV_TRAIN_STEPS = 3
+MLE_TRAIN_EPOCHS = 20
+ADV_TRAIN_EPOCHS = 20
+ADV_TRAIN_STEPS = 1
 POS_NEG_SAMPLES = 10000
 
 PRINT_EVERY = 100
@@ -40,7 +34,7 @@ oracle_state_dict_path = './oracle_EMBDIM32_HIDDENDIM32_VOCAB5000_MAXSEQLEN20.tr
 pretrained_gen_path = './gen_MLEtrain_EMBDIM32_HIDDENDIM32_VOCAB5000_MAXSEQLEN20.trc'
 pretrained_dis_path = './dis_pretrain_EMBDIM_64_HIDDENDIM64_VOCAB5000_MAXSEQLEN20.trc'
 
-PATH_TO_DATA =  'data/dailydialog/train/dialogues_train.txt'
+PATH_TO_DATA = 'data/dailydialog/train/dialogues_train.txt'
 
 def save_checkpoint(state, filename='checkpoint.m'):
     torch.save(state, filename)
