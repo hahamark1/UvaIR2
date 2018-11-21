@@ -7,6 +7,7 @@ from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
 from torch.utils.data import Dataset, DataLoader
 import os
 from seq2seq_evaluation import evaluate_test_set
+from utils.seq2seq_helper_funcs import plot_blue_score, plot_epoch_loss
 
 def indexesFromSentence(lang, sentence):
     return [lang.word2index[word] for word in sentence.split(' ')]
@@ -64,6 +65,8 @@ def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, pr
     num_iters = len(train_dataloader)
     iter = 0
     iter_loss = 0
+    blue_scores = []
+    losses = []
 
     for epoch in range(num_epochs):
 
@@ -111,8 +114,12 @@ def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, pr
         scheduler.step()
 
         epoch_loss_avg = epoch_loss / i
+        losses.append((epoch_loss_avg))
         print('After epoch {} the loss is {}'.format(epoch, epoch_loss_avg))
         average_score = evaluate_test_set(generator, test_dataloader)
+        blue_scores.append(average_score)
+        plot_blue_score(blue_scores)
+        plot_epoch_loss(losses)
         print('After epoch {} the average Blue score of the test set is: {}'.format(epoch, average_score))
 
 
