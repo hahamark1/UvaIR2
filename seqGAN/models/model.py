@@ -49,6 +49,7 @@ class Generator(nn.Module):
         use_teacher_forcing = True if random.random() < TEACHER_FORCING_RATIO else False
 
         decoder_outputs = []
+        words = []
 
         if use_teacher_forcing:
             # Teacher forcing: Feed the target as the next input
@@ -56,8 +57,10 @@ class Generator(nn.Module):
                 decoder_output, decoder_hidden, decoder_attention = self.decoder(
                     decoder_input, decoder_hidden, encoder_outputs)
                 loss += self.criterion(decoder_output, target_tensor[:, di])
+                sampled_word = torch.multinomial(torch.exp(decoder_output), 1)
                 decoder_input = target_tensor[:, di]  # Teacher forcing
                 decoder_outputs.append(decoder_output)
+                words.append(sampled_word)
 
         else:
             # Without teacher forcing: use its own predictions as the next input
@@ -70,9 +73,11 @@ class Generator(nn.Module):
                 loss += self.criterion(decoder_output, target_tensor[:, di])
                 sampled_word = torch.multinomial(torch.exp(decoder_output), 1)
                 decoder_outputs.append(decoder_output)
+                words.append(sampled_word)
 
+        words = torch.stack(words)
         decoder_outputs = torch.stack(decoder_outputs)
-        return loss, decoder_outputs
+        return loss, decoder_outputs, words
 
     def sample(self, input_tensor, start_letter=0, length=None):
 
@@ -147,7 +152,6 @@ class Generator(nn.Module):
         """
 
         loss_fn = nn.NLLLoss()
-        print(inp.shape)
         batch_size, seq_len = inp.size()
         inp = inp.permute(1, 0)           # seq_len x batch_size
         target = target.permute(1, 0)     # seq_len x batch_size

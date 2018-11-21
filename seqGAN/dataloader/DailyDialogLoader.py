@@ -99,6 +99,8 @@ class Vocabulary():
 
 	def tokens_to_sent(self, tensor):
 		tensor_list = tensor.cpu().data.numpy().tolist()
+		if isinstance(tensor_list[0], list):
+			tensor_list = [x[0] for x in tensor_list]
 		sentence = [self.index2word[token] for token in tensor_list]
 		sentence = [word for word in sentence if word != self.padding_token]
 		return " ".join(sentence)

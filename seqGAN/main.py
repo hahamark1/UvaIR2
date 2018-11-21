@@ -22,6 +22,7 @@ POS_NEG_SAMPLES = 10000
 
 PRINT_EVERY = 100
 SAVE_EVERY = 1000
+EVALUATE_EVERY = 100
 
 GEN_EMBEDDING_DIM = 32
 GEN_HIDDEN_DIM = 32
@@ -39,13 +40,15 @@ PATH_TO_DATA = 'data/dailydialog/train/dialogues_train.txt'
 def save_checkpoint(state, filename='checkpoint.m'):
     torch.save(state, filename)
 
+# def create_sentence(outputs):
+
 
 def train_generator_MLE(generator, dataloader, gen_opt, epochs):
     """
     Max Likelihood Pretraining for the generator
     """
     for epoch in range(epochs):
-        print('epoch %d : ' % (epoch + 1), end='')
+        print('epoch %d : \n' % (epoch + 1), end='')
         sys.stdout.flush()
         total_loss = 0
 
@@ -55,7 +58,7 @@ def train_generator_MLE(generator, dataloader, gen_opt, epochs):
 
             gen_opt.zero_grad()
 
-            loss, _ = generator(input_tensor, target_tensor)
+            loss, _, outputs = generator(input_tensor, target_tensor)
             loss.backward()
             gen_opt.step()
 
@@ -71,8 +74,24 @@ def train_generator_MLE(generator, dataloader, gen_opt, epochs):
                     'epoch': epoch + 1,
                     'state_dict': generator.state_dict(),
                     'optimizer': gen_opt.state_dict(),
-                })
+                }, filename='generator.m')
 
+            if i % EVALUATE_EVERY == 0:
+                test_sentence = input_tensor[0, :]
+                test_target_sentence = target_tensor[0, :]
+                generated_sentence = outputs[0, :]
+
+                real_test_sentence = dataloader.dataset.vocabulary.tokens_to_sent(test_sentence)
+                real_target_sentence = dataloader.dataset.vocabulary.tokens_to_sent(test_target_sentence)
+
+                generated_sentence = dataloader.dataset.vocabulary.tokens_to_sent(generated_sentence)
+
+                print(real_test_sentence)
+                print('>>')
+                print(generated_sentence)
+                print('==')
+                print(real_target_sentence)
+                print('-----------------------------')
         # each loss in a batch is loss per sample
         total_loss = total_loss / ceil(POS_NEG_SAMPLES / float(BATCH_SIZE)) / MAX_SEQ_LEN
 
@@ -100,8 +119,39 @@ def train_generator_PG(generator, dataloader, gen_opt, dis):
         pg_loss = generator.batchPGLoss(output, target_tensor, rewards)
         pg_loss.backward()
         gen_opt.step()
+
         if i % PRINT_EVERY == 0:
             print(' the PG_loss = {}'.format(pg_loss))
+
+        if i % SAVE_EVERY == 0:
+            save_checkpoint({
+                'epoch': epoch + 1,
+                'state_dict': generator.state_dict(),
+                'optimizer': gen_opt.state_dict(),
+            }, filename='generator.m')
+            save_checkpoint({
+                'epoch': epoch + 1,
+                'state_dict': discriminator.state_dict(),
+                'optimizer': dis_opt.state_dict(),
+            }, filename='discriminator.m')
+
+
+        if i % EVALUATE_EVERY == 0:
+            test_sentence = input_tensor[0, :]
+            test_target_sentence = target_tensor[0, :]
+            generated_sentence = output[0, :]
+
+            real_test_sentence = dataloader.dataset.vocabulary.tokens_to_sent(test_sentence)
+            real_target_sentence = dataloader.dataset.vocabulary.tokens_to_sent(test_target_sentence)
+
+            generated_sentence = dataloader.dataset.vocabulary.tokens_to_sent(generated_sentence)
+
+            print(real_test_sentence)
+            print('>>')
+            print(generated_sentence)
+            print('==')
+            print(real_target_sentence)
+            print('-----------------------------')
 
 
 def train_discriminator(dataloader, discriminator, dis_opt, generator, d_steps, epochs):
@@ -158,14 +208,31 @@ def train_discriminator(dataloader, discriminator, dis_opt, generator, d_steps, 
                         'epoch': epoch + 1,
                         'state_dict': discriminator.state_dict(),
                         'optimizer': dis_opt.state_dict(),
-                    })
+                    }, filename='discriminator.m')
+
+                if i % EVALUATE_EVERY == 0:
+                    test_sentence = input_tensor[0, :]
+                    test_target_sentence = target_tensor[0, :]
+                    generated_sentence = gen_tensor[0, :]
+
+                    real_test_sentence = dataloader.dataset.vocabulary.tokens_to_sent(test_sentence)
+                    real_target_sentence = dataloader.dataset.vocabulary.tokens_to_sent(test_target_sentence)
+
+                    generated_sentence = dataloader.dataset.vocabulary.tokens_to_sent(generated_sentence)
+
+                    print(real_test_sentence)
+                    print('>>')
+                    print(generated_sentence)
+                    print('==')
+                    print(real_target_sentence)
+                    print('-----------------------------')
 
 # MAIN
 if __name__ == '__main__':
 
-    oracle = generator.Generator(GEN_EMBEDDING_DIM, GEN_HIDDEN_DIM, VOCAB_SIZE, MAX_SEQ_LEN, gpu=CUDA)
-    oracle.load_state_dict(torch.load(oracle_state_dict_path))
-    oracle_samples = torch.load(oracle_samples_path).type(torch.LongTensor)
+    # oracle = generator.Generator(GEN_EMBEDDING_DIM, GEN_HIDDEN_DIM, VOCAB_SIZE, MAX_SEQ_LEN, gpu=CUDA)
+    # oracle.load_state_dict(torch.load(oracle_state_dict_path))
+    # oracle_samples = torch.load(oracle_samples_path).type(torch.LongTensor)
 
     dd_loader = DailyDialogLoader(PATH_TO_DATA)
 
