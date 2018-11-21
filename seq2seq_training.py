@@ -54,7 +54,7 @@ def trainIters(generator, dataloader, num_epochs=3000, print_every=100,
                evaluate_every=100, save_every=100, learning_rate=0.001):
 
     optimizer = optim.RMSprop(generator.parameters(), lr=learning_rate)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.9)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.9)
 
     num_iters = len(dataloader)
     iter = 0
@@ -73,7 +73,7 @@ def trainIters(generator, dataloader, num_epochs=3000, print_every=100,
             iter_loss += loss
             epoch_loss += loss
 
-            if i % print_every == 0 and i > 0:
+            if iter % print_every == 0 and iter > 0:
                 iter_loss_avg = iter_loss / print_every
                 print('Average loss of the last {} iters {}'.format(print_every, iter_loss_avg))
 
@@ -98,7 +98,7 @@ def trainIters(generator, dataloader, num_epochs=3000, print_every=100,
                 print('-----------------------------')
 
             if num_iters % save_every == 0 and num_iters > 0:
-                torch.save(generator, os.path.join('saved_models', 'generator.pt'))
+                torch.save(generator, os.path.join('saved_models', 'generator_{}.pt'.format(MAX_UTTERENCE_LENGTH)))
 
             num_iters += 1
             iter += 1
@@ -150,9 +150,11 @@ if __name__ == '__main__':
     dataloader = DataLoader(dd_loader, batch_size=16, shuffle=True, num_workers=0, collate_fn=PadCollate(pad_front=True))
 
     hidden_size = 256
+
     encoder1 = EncoderRNN(dd_loader.vocabulary.n_words, hidden_size).to(DEVICE)
     attn_decoder1 = AttnDecoderRNN(hidden_size, dd_loader.vocabulary.n_words).to(DEVICE)
-
     generator = Generator(encoder1, attn_decoder1, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False))
 
-    trainIters(generator, dataloader, save_every=100)
+    print('Training the model with a max length of: {}'.format(MAX_UTTERENCE_LENGTH))
+
+    trainIters(generator, dataloader, save_every=1000)
