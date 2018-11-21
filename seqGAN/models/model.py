@@ -85,11 +85,13 @@ class Generator(nn.Module):
         batch_size = input_tensor.shape[0]
         input_length = input_tensor.shape[1]
 
-        encoder_hidden = self.encoder.initHidden(batch_size=batch_size)
+        encoder_hidden = self.encoder.initHidden(batch_size=batch_size).to(DEVICE)
 
         encoder_outputs = torch.zeros(self.max_length, batch_size, self.encoder.hidden_size, device=DEVICE)
 
         loss = 0
+
+        input_tensor = input_tensor.to(DEVICE)
 
         for ei in range(input_length):
             encoder_output, encoder_hidden = self.encoder(
