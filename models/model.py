@@ -94,7 +94,7 @@ class DecoderRNN(nn.Module):
         output = self.embedding(input).view(1, batch_size, -1)
         output = self.relu(output)
         output, hidden = self.gru(output, hidden)
-        output = self.softmax(self.out(output[0]))
+        output = self.out(output[0])
         return output, hidden, None
 
     def initHidden(self):
@@ -142,7 +142,7 @@ class AttnDecoderRNN(nn.Module):
 
         output, hidden = self.gru(output, hidden)
 
-        output = self.log_softmax(self.out(output))
+        output = self.out(output)
         output = output.squeeze(0)
 
         return output, hidden, attn_weights

@@ -50,45 +50,37 @@ def train(input_tensor, target_tensor, generator, optimizer, criterion, max_leng
     return loss.item() / target_length
 
 
-def trainIters(generator, dataloader, num_epochs=30, print_every=100,
-               plot_every=100, evaluate_every=100, save_every=100,
-               learning_rate=0.01):
-
-    start = time.time()
-    plot_losses = []
-    print_loss_total = 0  # Reset every print_every
-    plot_loss_total = 0  # Reset every plot_every
+def trainIters(generator, dataloader, num_epochs=3000, print_every=100,
+               evaluate_every=100, save_every=100, learning_rate=0.001):
 
     optimizer = optim.RMSprop(generator.parameters(), lr=learning_rate)
-    criterion = nn.CrossEntropyLoss(ignore_index=0, size_average=False)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.9)
 
     num_iters = len(dataloader)
-    n_iters = 0
+    iter = 0
+    iter_loss = 0
 
     for epoch in range(num_epochs):
 
+        epoch_loss = 0
+
         for i, (input_tensor, target_tensor) in enumerate(dataloader):
-            n_iters += 1
 
             input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
 
-            loss = train(input_tensor, target_tensor, generator, optimizer, criterion)
+            loss = train(input_tensor, target_tensor, generator, optimizer, generator.criterion)
 
-            print_loss_total += loss
-            plot_loss_total += loss
+            iter_loss += loss
+            epoch_loss += loss
 
-            if n_iters % print_every == 0 and n_iters > 0:
-                print_loss_avg = print_loss_total / print_every
-                print_loss_total = 0
-                print('{} Epoch:[{}/{}] Iter:[{}/{}] Loss: {}'.format(timeSince(start, float(n_iters) / n_iters),
-                                                                      epoch, num_epochs, i, len(dataloader), print_loss_avg))
+            if iter % print_every == 0 and iter > 0:
+                iter_loss_avg = iter_loss / print_every
+                print('Average loss of the last {} iters {}'.format(print_every, iter_loss_avg))
 
-            if n_iters % plot_every == 0 and n_iters > 0:
-                plot_loss_avg = plot_loss_total / plot_every
-                plot_losses.append(plot_loss_avg)
-                plot_loss_total = 0
+                iter = 0
+                iter_loss = 0
 
-            if n_iters % evaluate_every == 0:
+            if num_iters % evaluate_every == 0:
                 test_sentence = input_tensor[0, :]
                 test_target_sentence = target_tensor[0, :]
 
@@ -105,22 +97,23 @@ def trainIters(generator, dataloader, num_epochs=30, print_every=100,
                 print(real_target_sentence)
                 print('-----------------------------')
 
-            if n_iters % save_every == 0 and n_iters > 0:
-                torch.save(generator, os.path.join('saved_models', 'generator.pt'))
+            if num_iters % save_every == 0 and num_iters > 0:
+                torch.save(generator, os.path.join('saved_models', 'generator_{}.pt'.format(MAX_UTTERENCE_LENGTH)))
 
-        plot_loss_avg = plot_loss_total / num_iters
-        plot_losses.append(plot_loss_avg)
-        plot_loss_total = 0
-        print('After epoch {} the loss is {}'.format(epoch, plot_loss_avg))
+            num_iters += 1
+            iter += 1
 
-    showPlot(plot_losses)
+        scheduler.step()
 
-def evaluate(encoder, decoder, input_tensor, max_length=20):
+        epoch_loss_avg = epoch_loss / i
+        print('After epoch {} the loss is {}'.format(epoch, epoch_loss_avg))
+
+
+def evaluate(encoder, decoder, input_tensor, max_length=MAX_LENGTH):
     with torch.no_grad():
 
-        input_length = max(input_tensor.size())
-
         input_tensor = input_tensor.view(1, -1)
+        input_length = input_tensor.shape[1]
 
         encoder_outputs = torch.zeros(max_length, 1, encoder.hidden_size, device=DEVICE)
         encoder_hidden = None
@@ -157,9 +150,11 @@ if __name__ == '__main__':
     dataloader = DataLoader(dd_loader, batch_size=16, shuffle=True, num_workers=0, collate_fn=PadCollate(pad_front=True))
 
     hidden_size = 256
+
     encoder1 = EncoderRNN(dd_loader.vocabulary.n_words, hidden_size).to(DEVICE)
-    attn_decoder1 = DecoderRNN(hidden_size, dd_loader.vocabulary.n_words).to(DEVICE)
+    attn_decoder1 = AttnDecoderRNN(hidden_size, dd_loader.vocabulary.n_words).to(DEVICE)
+    generator = Generator(encoder1, attn_decoder1, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False))
 
-    generator = Generator(encoder1, attn_decoder1, criterion=nn.NLLLoss(ignore_index=0, size_average=False))
+    print('Training the model with a max length of: {}'.format(MAX_UTTERENCE_LENGTH))
 
-    trainIters(generator, dataloader, print_every=100, save_every=100)
+    trainIters(generator, dataloader, save_every=1000)
