@@ -49,12 +49,18 @@ def prepare_discriminator_data(pos_samples, neg_samples, gpu=False):
         - inp: (pos_size + neg_size) x seq_len
         - target: pos_size + neg_size (boolean 1/0)
     """
+
     true_samples = torch.nn.utils.rnn.pad_sequence([torch.cat((tensor, target),0) for (tensor, target) in pos_samples])
     neg_samples = neg_samples.squeeze(-1)
     false_target = torch.nn.utils.rnn.pad_sequence([target for (input, target) in pos_samples])
+
+    neg_samples, false_target = neg_samples.to(DEVICE), false_target.to(DEVICE)
+
     false_samples = torch.cat((neg_samples, false_target),0).squeeze(1)
 
-    inp = torch.cat((true_samples, false_samples), 0).type(torch.LongTensor)
+    true_samples, false_samples = true_samples.to(DEVICE), false_samples.to(DEVICE)
+
+    inp = torch.cat((true_samples, false_samples), 0).type(torch.LongTensor).to(DEVICE)
     target = torch.ones(true_samples.size()[0] + false_samples.size()[0])
     target[true_samples.size()[0]:] = 0
 

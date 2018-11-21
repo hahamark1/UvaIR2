@@ -17,14 +17,14 @@ from torch.utils.data import Dataset, DataLoader
 from constants import *
 
 
-
-CUDA = False
+CUDA = True if torch.cuda.is_available() else False
 VOCAB_SIZE = 5000
 MAX_SEQ_LEN = 20
 START_LETTER = 0
 BATCH_SIZE = 32
-MLE_TRAIN_EPOCHS = 100
-ADV_TRAIN_EPOCHS = 50
+MLE_TRAIN_EPOCHS = 2
+ADV_TRAIN_EPOCHS = 1
+ADV_TRAIN_STEPS = 3
 POS_NEG_SAMPLES = 10000
 
 PRINT_EVERY = 100
@@ -122,6 +122,7 @@ def train_discriminator(dataloader, discriminator, dis_opt, generator, d_steps, 
     val_inp, val_target = helpers.prepare_discriminator_data(pos_val, neg_val, gpu=CUDA)
 
     for d_step in range(d_steps):
+
         for epoch in range(epochs):
             print('d-step %d epoch %d : \n' % (d_step + 1, epoch + 1), end='')
             sys.stdout.flush()
@@ -167,12 +168,14 @@ def train_discriminator(dataloader, discriminator, dis_opt, generator, d_steps, 
 
 # MAIN
 if __name__ == '__main__':
-    # oracle = generator.Generator(GEN_EMBEDDING_DIM, GEN_HIDDEN_DIM, VOCAB_SIZE, MAX_SEQ_LEN, gpu=CUDA)
-    # oracle.load_state_dict(torch.load(oracle_state_dict_path))
-    # oracle_samples = torch.load(oracle_samples_path).type(torch.LongTensor)
+
+    oracle = generator.Generator(GEN_EMBEDDING_DIM, GEN_HIDDEN_DIM, VOCAB_SIZE, MAX_SEQ_LEN, gpu=CUDA)
+    oracle.load_state_dict(torch.load(oracle_state_dict_path))
+    oracle_samples = torch.load(oracle_samples_path).type(torch.LongTensor)
+
     dd_loader = DailyDialogLoader(PATH_TO_DATA)
 
-    dataloader = DataLoader(dd_loader, batch_size=16, shuffle=True, num_workers=0, collate_fn=PadCollate(pad_front=True))
+    dataloader = DataLoader(dd_loader, batch_size=BATCH_SIZE, shuffle=True, num_workers=0, collate_fn=PadCollate(pad_front=True))
 
     hidden_size = 256
     encoder1 = EncoderRNN(dd_loader.vocabulary.n_words, hidden_size).to(DEVICE)
@@ -189,7 +192,7 @@ if __name__ == '__main__':
 
     if CUDA:
         oracle = oracle.cuda()
-        gen = gen.cuda()
+        generator = generator.cuda()
         dis = dis.cuda()
         oracle_samples = oracle_samples.cuda()
 
@@ -198,13 +201,13 @@ if __name__ == '__main__':
     gen_optimizer = optim.Adam(generator.parameters(), lr=1e-3)
     train_generator_MLE(generator, dataloader, gen_optimizer, MLE_TRAIN_EPOCHS)
 
-    torch.save(gen.state_dict(), pretrained_gen_path)
+    torch.save(generator.state_dict(), pretrained_gen_path)
     # gen.load_state_dict(torch.load(pretrained_gen_path))
 
     # PRETRAIN DISCRIMINATOR
     print('\nStarting Discriminator Training...')
     dis_optimizer = optim.Adagrad(dis.parameters())
-    train_discriminator(dataloader, dis, dis_optimizer, generator, 50, 3)
+    train_discriminator(dataloader, dis, dis_optimizer, generator, ADV_TRAIN_STEPS, ADV_TRAIN_EPOCHS)
 
     torch.save(dis.state_dict(), pretrained_dis_path)
     # dis.load_state_dict(torch.load(pretrained_dis_path))
