@@ -1,171 +1,158 @@
-from __future__ import unicode_literals, print_function, division
-from io import open
-import unicodedata
-import string
-import re
-import random
-import time
-import math
-import matplotlib.pyplot as plt
-plt.switch_backend('agg')
-import matplotlib.ticker as ticker
-import numpy as np
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Nov  7 13:56:42 2018
+
+@author: Joris
+"""
 
 import torch
+from models.model import AttnDecoderRNN, EncoderRNN, DecoderRNN, Generator
+import random
+import time
+from utils.seq2seq_helper_funcs import showPlot, asMinutes, timeSince
+import torch.optim as optim
 import torch.nn as nn
-from torch import optim
-import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
-
-from models.model import *
-from utils.seq2seq_helper_funcs import *
+from constants import *
 from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
-from constants import DEVICE
-
-PATH_TO_DATA = 'data/dailydialog/train/dialogues_train.txt'
+from torch.utils.data import Dataset, DataLoader
+import os
 
 teacher_forcing_ratio = 0.5
-MAX_LENGTH = 10
 
-def train(input_tensor, target_tensor, encoder, decoder, encoder_optimizer, decoder_optimizer, criterion, max_length=MAX_LENGTH):
-    encoder_hidden = encoder.initHidden()
-    encoder_optimizer.zero_grad()
-    decoder_optimizer.zero_grad()
+def indexesFromSentence(lang, sentence):
+    return [lang.word2index[word] for word in sentence.split(' ')]
 
-    input_length = input_tensor.size(0)
-    target_length = target_tensor.size(0)
 
-    encoder_outputs = torch.zeros(max_length, encoder.hidden_size, device=DEVICE)
+def tensorFromSentence(lang, sentence, question=False):
+    indexes = indexesFromSentence(lang, sentence)
 
-    loss = 0
-
-    for ei in range(input_length):
-        encoder_output, encoder_hidden = encoder(
-            input_tensor[ei], encoder_hidden)
-        encoder_outputs[ei] = encoder_output[0, 0]
-
-    decoder_input = torch.tensor([[SOS_token]], device=DEVICE)
-
-    decoder_hidden = encoder_hidden
-
-    use_teacher_forcing = True if random.random() < teacher_forcing_ratio else False
-
-    if use_teacher_forcing:
-        # Teacher forcing: Feed the target as the next input
-        for di in range(target_length):
-            decoder_output, decoder_hidden, decoder_attention = decoder(
-                decoder_input, decoder_hidden, encoder_outputs)
-            loss += criterion(decoder_output, target_tensor[di])
-            decoder_input = target_tensor[di]  # Teacher forcing
-
+    if question:
+        indexes.append(EOU_token)
     else:
-        # Without teacher forcing: use its own predictions as the next input
-        for di in range(target_length):
-            decoder_output, decoder_hidden, decoder_attention = decoder(
-                decoder_input, decoder_hidden, encoder_outputs)
-            topv, topi = decoder_output.topk(1)
-            decoder_input = topi.squeeze().detach()  # detach from history as input
+        indexes.append(EOS_token)
+    return torch.tensor(indexes, dtype=torch.long, device=DEVICE).view(-1, 1)
 
-            loss += criterion(decoder_output, target_tensor[di])
-            if decoder_input.item() == EOS_token:
-                break
 
+def tensorsFromPair(pair, language):
+    input_tensor = tensorFromSentence(language, pair[0], question=True)
+    target_tensor = tensorFromSentence(language, pair[1], question=False)
+    return (input_tensor, target_tensor)
+
+
+def train(input_tensor, target_tensor, generator, optimizer, criterion, max_length=MAX_LENGTH):
+
+    optimizer.zero_grad()
+    loss = generator(input_tensor, target_tensor)
     loss.backward()
-
-    encoder_optimizer.step()
-    decoder_optimizer.step()
+    optimizer.step()
+    target_length = target_tensor.shape[1]
 
     return loss.item() / target_length
 
-def trainIters(dataloader, encoder, decoder, n_iters, print_every=1000, plot_every=100, learning_rate=0.01):
-    start = time.time()
-    plot_losses = []
-    print_loss_total = 0  # Reset every print_every
-    plot_loss_total = 0  # Reset every plot_every
 
-    encoder_optimizer = optim.SGD(encoder.parameters(), lr=learning_rate)
-    decoder_optimizer = optim.SGD(decoder.parameters(), lr=learning_rate)
-    criterion = nn.NLLLoss()
+def trainIters(generator, dataloader, num_epochs=3000, print_every=100,
+               evaluate_every=100, save_every=100, learning_rate=0.001):
 
-    for i, (input_tensor, target_tensor) in enumerate(dataloader):
+    optimizer = optim.RMSprop(generator.parameters(), lr=learning_rate)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.9)
 
-        input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
+    num_iters = len(dataloader)
+    iter = 0
+    iter_loss = 0
 
-        loss = train(input_tensor, target_tensor, encoder,
-                     decoder, encoder_optimizer, decoder_optimizer, criterion)
-        print_loss_total += loss
-        plot_loss_total += loss
+    for epoch in range(num_epochs):
 
-        if iter % print_every == 0:
-            print_loss_avg = print_loss_total / print_every
-            print_loss_total = 0
-            print('%s (%d %d%%) %.4f' % (timeSince(start, iter / n_iters),
-                                         iter, iter / n_iters * 100, print_loss_avg))
+        epoch_loss = 0
 
-        if iter % plot_every == 0:
-            plot_loss_avg = plot_loss_total / plot_every
-            plot_losses.append(plot_loss_avg)
-            plot_loss_total = 0
+        for i, (input_tensor, target_tensor) in enumerate(dataloader):
 
-    showPlot(plot_losses)
+            input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
 
-def evaluate(encoder, decoder, sentence, max_length=MAX_LENGTH):
+            loss = train(input_tensor, target_tensor, generator, optimizer, generator.criterion)
+
+            iter_loss += loss
+            epoch_loss += loss
+
+            if i % print_every == 0 and i > 0:
+                iter_loss_avg = iter_loss / print_every
+                print('Average loss of the last {} iters {}'.format(print_every, iter_loss_avg))
+
+                iter = 0
+                iter_loss = 0
+
+            if num_iters % evaluate_every == 0:
+                test_sentence = input_tensor[0, :]
+                test_target_sentence = target_tensor[0, :]
+
+                real_test_sentence = dataloader.dataset.vocabulary.tokens_to_sent(test_sentence)
+                real_target_sentence = dataloader.dataset.vocabulary.tokens_to_sent(test_target_sentence)
+
+                decoded_words = evaluate(generator.encoder, generator.decoder, test_sentence)
+                generated_sentence = dataloader.dataset.vocabulary.list_to_sent(decoded_words)
+
+                print(real_test_sentence)
+                print('>>')
+                print(generated_sentence)
+                print('==')
+                print(real_target_sentence)
+                print('-----------------------------')
+
+            if num_iters % save_every == 0 and num_iters > 0:
+                torch.save(generator, os.path.join('saved_models', 'generator.pt'))
+
+            num_iters += 1
+            iter += 1
+
+        scheduler.step()
+
+        epoch_loss_avg = epoch_loss / i
+        print('After epoch {} the loss is {}'.format(epoch, epoch_loss_avg))
+
+
+def evaluate(encoder, decoder, input_tensor, max_length=MAX_LENGTH):
     with torch.no_grad():
-        input_tensor = tensorFromSentence(input_lang, sentence)
-        input_length = input_tensor.size()[0]
-        encoder_hidden = encoder.initHidden()
 
-        encoder_outputs = torch.zeros(max_length, encoder.hidden_size, device=DEVICE)
+        input_tensor = input_tensor.view(1, -1)
+        input_length = input_tensor.shape[1]
+
+        encoder_outputs = torch.zeros(max_length, 1, encoder.hidden_size, device=DEVICE)
+        encoder_hidden = None
 
         for ei in range(input_length):
-            encoder_output, encoder_hidden = encoder(input_tensor[ei],
-                                                     encoder_hidden)
-            encoder_outputs[ei] += encoder_output[0, 0]
+            encoder_output, encoder_hidden = encoder(input_tensor[:, ei], encoder_hidden)
+            encoder_outputs[ei, :, :] = encoder_output[0, :, :]
 
-        decoder_input = torch.tensor([[SOS_token]], device=DEVICE)  # SOS
+        decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).view(-1, 1)  # SOS
 
         decoder_hidden = encoder_hidden
 
         decoded_words = []
-        decoder_attentions = torch.zeros(max_length, max_length)
 
-        for di in range(max_length):
-            decoder_output, decoder_hidden, decoder_attention = decoder(
-                decoder_input, decoder_hidden, encoder_outputs)
-            decoder_attentions[di] = decoder_attention.data
+        for di in range(MAX_WORDS_GEN):
+            decoder_output, decoder_hidden, _ = decoder(decoder_input, decoder_hidden, encoder_outputs)
             topv, topi = decoder_output.data.topk(1)
-            if topi.item() == EOS_token:
-                decoded_words.append('<EOS>')
+
+            if topi.item() == EOS_INDEX:
+                decoded_words.append(EOS_INDEX)
                 break
             else:
-                decoded_words.append(output_lang.index2word[topi.item()])
+                decoded_words.append(topi.item())
 
-            decoder_input = topi.squeeze().detach()
+            decoder_input = topi.detach()
 
-        return decoded_words, decoder_attentions[:di + 1]
-
-def evaluateRandomly(encoder, decoder, n=10):
-
-    for i in range(n):
-        pair = random.choice(pairs)
-        print('>', pair[0])
-        print('=', pair[1])
-        output_words, attentions = evaluate(encoder, decoder, pair[0])
-        output_sentence = ' '.join(output_words)
-        print('<', output_sentence)
-        print('')
-
+        print(decoded_words)
+        return decoded_words
 
 if __name__ == '__main__':
 
+    PATH_TO_DATA =  'data/dailydialog/train/dialogues_train.txt'
     dd_loader = DailyDialogLoader(PATH_TO_DATA)
-    dataloader = DataLoader(dd_loader, batch_size=4, shuffle=True, num_workers=0, collate_fn=PadCollate(pad_front=False))
+    dataloader = DataLoader(dd_loader, batch_size=16, shuffle=True, num_workers=0, collate_fn=PadCollate(pad_front=True))
 
-    hidden_size = 512
+    hidden_size = 256
     encoder1 = EncoderRNN(dd_loader.vocabulary.n_words, hidden_size).to(DEVICE)
-    attn_decoder1 = AttnDecoderRNN(hidden_size, dd_loader.vocabulary.n_words, dropout_p=0.1).to(DEVICE)
+    attn_decoder1 = AttnDecoderRNN(hidden_size, dd_loader.vocabulary.n_words).to(DEVICE)
 
-    trainIters(dataloader, encoder1, attn_decoder1, 100000, print_every=1000)
+    generator = Generator(encoder1, attn_decoder1, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False))
 
-    evaluateRandomly(encoder1, attn_decoder1)
-
+    trainIters(generator, dataloader, save_every=100)
