@@ -15,7 +15,7 @@ VOCAB_SIZE = 5000
 MAX_SEQ_LEN = 25
 START_LETTER = 0
 BATCH_SIZE = 32
-MLE_TRAIN_EPOCHS = 100
+MLE_TRAIN_EPOCHS = 50
 ADV_TRAIN_EPOCHS = 100
 ADV_TRAIN_STEPS = 1
 POS_NEG_SAMPLES = 10000
@@ -251,10 +251,10 @@ if __name__ == '__main__':
     dis = discriminator.Discriminator(DIS_EMBEDDING_DIM, DIS_HIDDEN_DIM, dd_loader.vocabulary.n_words, MAX_SEQ_LEN, gpu=CUDA)
 
     if CUDA:
-        oracle = oracle.cuda()
+        # oracle = oracle.cuda()
         generator = generator.cuda()
         dis = dis.cuda()
-        oracle_samples = oracle_samples.cuda()
+        # oracle_samples = oracle_samples.cuda()
 
     # GENERATOR MLE TRAINING
     print('Starting Generator MLE Training...')
