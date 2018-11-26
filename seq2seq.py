@@ -4,10 +4,16 @@ import torch.optim as optim
 import torch.nn as nn
 from constants import *
 from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 import os
-from seq2seq_evaluation import evaluate_test_set
 from utils.seq2seq_helper_funcs import plot_blue_score, plot_epoch_loss
+from evaluation.BlueEvaluator import BlueEvaluator
+
+
+def load_model(length=MAX_UTTERENCE_LENGTH):
+    """ Load the model if it is available"""
+
+    return torch.load(os.path.join(PATH_TO_SAVE, 'generator_{}.pt'.format(length))).to(DEVICE)
 
 def indexesFromSentence(lang, sentence):
     return [lang.word2index[word] for word in sentence.split(' ')]
@@ -156,15 +162,67 @@ def evaluate(encoder, decoder, input_tensor, max_length=MAX_LENGTH):
 
         return decoded_words
 
+def evaluate_test_set(generator, test_dataloader, max_length=MAX_LENGTH):
+
+    encoder = generator.encoder
+    decoder = generator.decoder
+
+    BLUE = BlueEvaluator(test_dataloader.dataset.vocabulary.index2word)
+
+    scores = []
+
+    with torch.no_grad():
+
+        for i, (input_tensor, target_tensor) in enumerate(test_dataloader):
+
+            input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
+
+            batch_size = input_tensor.shape[0]
+            input_length = input_tensor.shape[1]
+
+            encoder_outputs = torch.zeros(max_length, batch_size, encoder.hidden_size, device=DEVICE)
+            encoder_hidden = None
+
+            for ei in range(input_length):
+                encoder_output, encoder_hidden = encoder(input_tensor[:, ei], encoder_hidden)
+                encoder_outputs[ei, :, :] = encoder_output[0, :, :]
+
+            decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).view(-1, 1)  # SOS
+
+            decoder_hidden = encoder_hidden
+
+            decoded_words = []
+
+            for di in range(MAX_WORDS_GEN):
+                decoder_output, decoder_hidden, _ = decoder(decoder_input, decoder_hidden, encoder_outputs)
+                topv, topi = decoder_output.data.topk(1)
+
+                if topi.item() == EOS_INDEX:
+                    decoded_words.append(EOS_INDEX)
+                    break
+                else:
+                    decoded_words.append(topi.item())
+
+                decoder_input = topi.detach()
+
+            score = BLUE.list_to_blue(decoded_words, target_tensor.cpu().tolist()[0])
+            scores.append(score)
+
+    average_score = sum(scores) / len(scores)
+    return average_score
+
+
 if __name__ == '__main__':
 
     dd_loader, train_dataloader, test_dataloader = load_dataset()
 
-    hidden_size = 256
-
-    encoder1 = EncoderRNN(dd_loader.vocabulary.n_words, hidden_size).to(DEVICE)
-    attn_decoder1 = AttnDecoderRNN(hidden_size, dd_loader.vocabulary.n_words).to(DEVICE)
-    generator = Generator(encoder1, attn_decoder1, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False))
+    try:
+        generator = load_model()
+    except:
+        hidden_size = 256
+        encoder1 = EncoderRNN(dd_loader.vocabulary.n_words, hidden_size).to(DEVICE)
+        attn_decoder1 = AttnDecoderRNN(hidden_size, dd_loader.vocabulary.n_words).to(DEVICE)
+        generator = Generator(encoder1, attn_decoder1, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False))
 
     print('Training the model with a max length of: {}'.format(MAX_UTTERENCE_LENGTH))
 
