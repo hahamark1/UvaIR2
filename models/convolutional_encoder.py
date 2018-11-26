@@ -1,0 +1,137 @@
+import torch.nn as nn
+from models.conv_tbc import ConvTBC
+from models.grad_multiply import GradMultiply
+import math
+import torch.nn.functional as F
+
+
+class FConvEncoder(nn.Module):
+    """Convolutional encoder"""
+
+
+    def __init__(self, vocab_size, embed_dim=512, convolutions=((512, 3),) * 5,
+                 dropout=0.1):
+
+        super(FConvEncoder, self).__init__()
+
+        self.dropout = dropout
+
+        # TODO, dit is afhankelijk van de decoder
+        self.num_attention_layers = 1
+
+        self.embed_tokens = nn.Embedding(vocab_size, embed_dim)
+
+        convolutions = extend_conv_spec(convolutions)
+        in_channels = convolutions[0][0]
+
+        self.fc1 = nn.Linear(embed_dim, in_channels)
+        self.dropout1 = nn.Dropout(p=dropout)
+
+        self.projections = nn.ModuleList()
+        self.convolutions = nn.ModuleList()
+        self.residuals = []
+
+        layer_in_channels = [in_channels]
+
+        for i, (out_channels, kernel_size, residual) in enumerate(convolutions):
+            if residual == 0:
+                residual_dim = out_channels
+            else:
+                residual_dim = layer_in_channels[-residual]
+            self.projections.append(nn.Linear(residual_dim, out_channels)
+                                    if residual_dim != out_channels else None)
+
+            if kernel_size % 2 == 1:
+                padding = kernel_size // 2
+            else:
+                padding = 0
+            self.convolutions.append(
+                ConvTBC_(in_channels, out_channels * 2, kernel_size,
+                        dropout=dropout, padding=padding)
+            )
+
+            self.residuals.append(residual)
+            in_channels = out_channels
+            layer_in_channels.append(out_channels)
+
+        self.fc2 = nn.Linear(in_channels, embed_dim)
+
+    def forward(self, src_tokens):
+
+        # embed tokens and positions
+        x = self.embed_tokens(src_tokens)
+        x = F.dropout(x, p=self.dropout, training=self.training)
+        input_embedding = x
+
+        # project to size of convolution
+        x = self.fc1(x)
+        x = self.dropout1(x)
+
+        # B x T x C -> T x B x C
+        x = x.transpose(0, 1)
+
+        residuals = [x]
+        # temporal convolutions
+        for proj, conv, res_layer in zip(self.projections, self.convolutions, self.residuals):
+            if res_layer > 0:
+                residual = residuals[-res_layer]
+                residual = residual if proj is None else proj(residual)
+            else:
+                residual = None
+
+            x = F.dropout(x, p=self.dropout, training=self.training)
+            if conv.kernel_size[0] % 2 == 1:
+
+                # padding is implicit in the conv
+                x = conv(x)
+            else:
+                padding_l = (conv.kernel_size[0] - 1) // 2
+                padding_r = conv.kernel_size[0] // 2
+                x = F.pad(x, (0, 0, 0, 0, padding_l, padding_r))
+                x = conv(x)
+
+            x = F.glu(x, dim=2)
+
+            if residual is not None:
+                x = (x + residual) * math.sqrt(0.5)
+            residuals.append(x)
+
+        # T x B x C -> B x T x C
+        x = x.transpose(1, 0)
+
+        # project back to size of embedding
+        x = self.fc2(x)
+
+        # scale gradients (this only affects backward, not forward)
+        x = GradMultiply.apply(x, 1.0 / (2.0 * self.num_attention_layers))
+
+        # add output to input embedding for attention
+        y = (x + input_embedding) * math.sqrt(0.5)
+
+        return y, x
+
+
+def ConvTBC_(in_channels, out_channels, kernel_size, dropout=0, **kwargs):
+    """Weight-normalized Conv1d layer"""
+
+    m = ConvTBC(in_channels, out_channels, kernel_size, **kwargs)
+    std = math.sqrt((4 * (1.0 - dropout)) / (m.kernel_size[0] * in_channels))
+    m.weight.data.normal_(mean=0, std=std)
+    m.bias.data.zero_()
+    return m
+
+def extend_conv_spec(convolutions):
+    """
+    Extends convolutional spec that is a list of tuples of 2 or 3 parameters
+    (kernel size, dim size and optionally how many layers behind to look for residual)
+    to default the residual propagation param if it is not specified
+    """
+    extended = []
+    for spec in convolutions:
+        if len(spec) == 3:
+            extended.append(spec)
+        elif len(spec) == 2:
+            extended.append(spec + (1,))
+        else:
+            raise Exception('invalid number of parameters in convolution spec ' + str(spec) + '. expected 2 or 3')
+    return tuple(extended)
