@@ -1,16 +1,11 @@
 from __future__ import unicode_literals, print_function, division
-from io import open
-import unicodedata
-import string
-import re
-import random
+import os
 import time
 import math
-import torch
 import matplotlib.pyplot as plt
 plt.switch_backend('agg')
 import matplotlib.ticker as ticker
-import numpy as np
+from constants import *
 
 SOS_token = 0
 EOS_token = 1
@@ -37,15 +32,30 @@ def timeSince(since, percent):
     rs = es - s
     return '%s (- %s)' % (asMinutes(s), asMinutes(rs))
 
-def indexesFromSentence(lang, sentence):
-    return [lang.word2index[word] for word in sentence.split(' ')]
 
-def tensorFromSentence(lang, sentence):
-    indexes = indexesFromSentence(lang, sentence)
-    indexes.append(EOS_token)
-    return torch.tensor(indexes, dtype=torch.long, device=device).view(-1, 1)
+def plot_blue_score(scores):
+    """ Plot the blue scores, given a list of scores"""
 
-def tensorsFromPair(input_lang, output_lang, pair):
-    input_tensor = tensorFromSentence(input_lang, pair[0])
-    target_tensor = tensorFromSentence(output_lang, pair[1])
-    return (input_tensor, target_tensor)
+    plt.figure()
+    plt.plot(scores)
+    plt.title('BLUE score over epochs', fontsize=17)
+    plt.xlabel('Epochs', fontsize=17)
+    plt.ylabel('BLUE score', fontsize=17)
+
+    plt.savefig(os.path.join('figures', 'blue_score_{}.png'.format(MAX_LENGTH)))
+    plt.close()
+
+def plot_epoch_loss(losses):
+    """ Plot the losses of each epoch """
+
+    plt.figure()
+    plt.plot(losses)
+    plt.title('Losses over epochs', fontsize=17)
+    plt.xlabel('Epochs', fontsize=17)
+    plt.ylabel('Loss', fontsize=17)
+
+    plt.savefig(os.path.join('figures', 'losses_{}.png'.format(MAX_LENGTH)))
+    plt.close()
+
+
+

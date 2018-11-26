@@ -1,23 +1,13 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Nov  7 13:56:42 2018
-
-@author: Joris
-"""
-
 import torch
-from models.model import AttnDecoderRNN, EncoderRNN, DecoderRNN, Generator
-import random
-import time
-from utils.seq2seq_helper_funcs import showPlot, asMinutes, timeSince
+from models.model import AttnDecoderRNN, EncoderRNN, Generator
 import torch.optim as optim
 import torch.nn as nn
 from constants import *
 from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
 from torch.utils.data import Dataset, DataLoader
 import os
-
-teacher_forcing_ratio = 0.5
+from seq2seq_evaluation import evaluate_test_set
+from utils.seq2seq_helper_funcs import plot_blue_score, plot_epoch_loss
 
 def indexesFromSentence(lang, sentence):
     return [lang.word2index[word] for word in sentence.split(' ')]
@@ -49,22 +39,40 @@ def train(input_tensor, target_tensor, generator, optimizer, criterion, max_leng
 
     return loss.item() / target_length
 
+def load_dataset():
+    """ Load the training and test sets """
 
-def trainIters(generator, dataloader, num_epochs=3000, print_every=100,
+
+    train_dd_loader = DailyDialogLoader(PATH_TO_TRAIN_DATA, load=False)
+    train_dataloader = DataLoader(train_dd_loader, batch_size=16, shuffle=True, num_workers=0,
+                            collate_fn=PadCollate(pad_front=True))
+
+    test_dd_loader = DailyDialogLoader(PATH_TO_TEST_DATA, load=True)
+    test_dataloader = DataLoader(test_dd_loader, batch_size=1, shuffle=False, num_workers=0,
+                            collate_fn=PadCollate(pad_front=True))
+
+    assert train_dd_loader.vocabulary.n_words == test_dd_loader.vocabulary.n_words
+
+    return train_dd_loader, train_dataloader, test_dataloader
+
+
+def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, print_every=100,
                evaluate_every=100, save_every=100, learning_rate=0.001):
 
     optimizer = optim.RMSprop(generator.parameters(), lr=learning_rate)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.9)
 
-    num_iters = len(dataloader)
+    num_iters = len(train_dataloader)
     iter = 0
     iter_loss = 0
+    blue_scores = []
+    losses = []
 
     for epoch in range(num_epochs):
 
         epoch_loss = 0
 
-        for i, (input_tensor, target_tensor) in enumerate(dataloader):
+        for i, (input_tensor, target_tensor) in enumerate(train_dataloader):
 
             input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
 
@@ -84,11 +92,11 @@ def trainIters(generator, dataloader, num_epochs=3000, print_every=100,
                 test_sentence = input_tensor[0, :]
                 test_target_sentence = target_tensor[0, :]
 
-                real_test_sentence = dataloader.dataset.vocabulary.tokens_to_sent(test_sentence)
-                real_target_sentence = dataloader.dataset.vocabulary.tokens_to_sent(test_target_sentence)
+                real_test_sentence = train_dataloader.dataset.vocabulary.tokens_to_sent(test_sentence)
+                real_target_sentence = train_dataloader.dataset.vocabulary.tokens_to_sent(test_target_sentence)
 
                 decoded_words = evaluate(generator.encoder, generator.decoder, test_sentence)
-                generated_sentence = dataloader.dataset.vocabulary.list_to_sent(decoded_words)
+                generated_sentence = train_dataloader.dataset.vocabulary.list_to_sent(decoded_words)
 
                 print(real_test_sentence)
                 print('>>')
@@ -106,7 +114,13 @@ def trainIters(generator, dataloader, num_epochs=3000, print_every=100,
         scheduler.step()
 
         epoch_loss_avg = epoch_loss / i
+        losses.append((epoch_loss_avg))
         print('After epoch {} the loss is {}'.format(epoch, epoch_loss_avg))
+        average_score = evaluate_test_set(generator, test_dataloader)
+        blue_scores.append(average_score)
+        plot_blue_score(blue_scores)
+        plot_epoch_loss(losses)
+        print('After epoch {} the average Blue score of the test set is: {}'.format(epoch, average_score))
 
 
 def evaluate(encoder, decoder, input_tensor, max_length=MAX_LENGTH):
@@ -140,14 +154,11 @@ def evaluate(encoder, decoder, input_tensor, max_length=MAX_LENGTH):
 
             decoder_input = topi.detach()
 
-        print(decoded_words)
         return decoded_words
 
 if __name__ == '__main__':
 
-    PATH_TO_DATA =  'data/dailydialog/train/dialogues_train.txt'
-    dd_loader = DailyDialogLoader(PATH_TO_DATA)
-    dataloader = DataLoader(dd_loader, batch_size=16, shuffle=True, num_workers=0, collate_fn=PadCollate(pad_front=True))
+    dd_loader, train_dataloader, test_dataloader = load_dataset()
 
     hidden_size = 256
 
@@ -157,4 +168,4 @@ if __name__ == '__main__':
 
     print('Training the model with a max length of: {}'.format(MAX_UTTERENCE_LENGTH))
 
-    trainIters(generator, dataloader, save_every=1000)
+    trainIters(generator, train_dataloader, test_dataloader, save_every=10000000000)
