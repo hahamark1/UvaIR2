@@ -4,13 +4,12 @@ import numpy as np
 import unicodedata
 import string
 import re
-
+from collections import defaultdict
+import os
+import pickle
 import sys
 sys.path.append("..")
 from constants import *
-
-
-N_UTTERANCES_FOR_INPUT = 3
 
 
 def unicodeToAscii(s):
@@ -57,6 +56,7 @@ def normalizeString(s):
 
 	# We do not want to take the last __eou__ into account
 	s = ' '.join(s.split()[:-1])
+	s = re.sub('__eou__ __eou__', '__eou__', s)
 	return s.lower()
 
 def filterPair(p):
@@ -68,7 +68,7 @@ def filterPairs(pairs):
 
 class Vocabulary():
 
-	def __init__(self):
+	def __init__(self, load):
 
 		self.padding_token = PADDING_TOKEN
 		self.split_token = SPLIT_TOKEN
@@ -83,7 +83,23 @@ class Vocabulary():
 		self.index2word = {self.word2index[key]: key for key in self.word2index.keys()}
 		self.n_words = 7
 
+		self.word2index = defaultdict(lambda: UNK_INDEX, self.word2index)
+		self.index2word = defaultdict(lambda: UNK_TOKEN, self.index2word)
+		self.word2count = defaultdict(lambda: 0, self.word2count)
+
+		self.loaded = False
+
+		if load:
+			self.load_vocabulary()
+			self.loaded = True
+			print('Loaded the dictionary')
+
+
 	def add_word(self, word):
+
+		if self.loaded:
+			return
+
 		if word not in self.word2index:
 			self.word2index[word] = self.n_words
 			self.word2count[word] = 1
@@ -93,6 +109,10 @@ class Vocabulary():
 			self.word2count[word] += 1
 
 	def add_utterance(self, utterance):
+
+		if self.loaded:
+			return
+
 		utterance = utterance.split(' ')
 		for word in utterance:
 			self.add_word(word)
@@ -108,13 +128,36 @@ class Vocabulary():
 		sentence = [word for word in sentence if word != self.padding_token]
 		return " ".join(sentence)
 
+	def save_vocabulary(self):
+		""" Save the vocabulary and word2index and index2word """
+
+		self.word2index = dict(self.word2index)
+		self.index2word = dict(self.index2word)
+
+		with open(os.path.join(PATH_TO_SAVE, 'word2index_index2word.p'), 'wb') as handle:
+			pickle.dump((self.word2index, self.index2word), handle)
+
+		print('Wrote the vocabulary to a pickle')
+
+	def load_vocabulary(self):
+		""" Load a saved vocabulary and word2index and index2word"""
+
+		with open(os.path.join(PATH_TO_SAVE, 'word2index_index2word.p'), 'rb') as handle:
+			self.word2index, self.index2word = pickle.load(handle)
+
+		self.word2index = defaultdict(lambda: UNK_INDEX, self.word2index)
+		self.index2word = defaultdict(lambda: UNK_TOKEN, self.index2word)
+		self.n_words = len(self.index2word.keys())
+
+		assert len(self.word2index) == len(self.index2word)
+
 class DailyDialogLoader(Dataset):
 
-	def __init__(self, path_to_data):
+	def __init__(self, path_to_data, load=False):
 		self.path_to_data = path_to_data
 
 		# Initalize a Vocabulary object
-		self.vocabulary = Vocabulary()
+		self.vocabulary = Vocabulary(load=load)
 
 		# Initialize the lists in which to store the good stuff
 		self.dialogues = []
@@ -140,6 +183,9 @@ class DailyDialogLoader(Dataset):
 
 		print('Starting to train with {} dialogue pairs'.format(len(self.dialogues)))
 		print('The vocab size is {}'.format(self.vocabulary.n_words))
+
+		if not load:
+			self.vocabulary.save_vocabulary()
 
 	def __len__(self):
 		# Needed for the PyTorch DataLoader, returns the length of the dataset
@@ -279,8 +325,9 @@ if __name__ == '__main__':
 
 	from torch.utils.data import Dataset, DataLoader
 
-	DDL = DailyDialogLoader('datasets/dialogues_train.txt')
-	dataloader = DataLoader(DDL, batch_size=2, shuffle=True, num_workers=0, collate_fn=PadCollate(pad_front=True))
+	PATH_TO_SAVE = os.path.join('..', 'saved_models')
+	DDL = DailyDialogLoader('../data/dailydialog/train/dialogues_train.txt')
+	dataloader = DataLoader(DDL, batch_size=16, shuffle=True, num_workers=0, collate_fn=PadCollate(pad_front=True))
 
 	for i, (data, target) in enumerate(dataloader):
 
