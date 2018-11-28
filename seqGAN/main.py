@@ -131,7 +131,7 @@ def train_generator_PG(generator, dataloader, gen_opt, dis):
             }, filename='generator.m')
             save_checkpoint({
                 'epoch': epoch + 1,
-                'state_dict': discriminator.state_dict(),
+                'state_dict': dis.state_dict(),
                 'optimizer': dis_opt.state_dict(),
             }, filename='discriminator.m')
 
