@@ -20,7 +20,7 @@ class ConvGenerator(nn.Module):
 
         loss = 0
 
-        encoder_hidden = self.encoder.forward(input_tensor)
+        encoder_hidden = self.encoder.forward(input_tensor).transpose(0, 1)
         print(encoder_hidden.shape)
 
         decoder_input = torch.tensor([[SOS_INDEX] * batch_size], device=DEVICE).transpose(0, 1)
