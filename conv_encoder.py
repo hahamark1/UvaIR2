@@ -3,7 +3,7 @@ from models.convolutional_encoder import FConvEncoder
 import torch.optim as optim
 import torch.nn as nn
 from models.model import AttnDecoderRNN
-from models.convolutional_generator import Generator
+from models.convolutional_generator import ConvGenerator
 from constants import *
 from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
 from torch.utils.data import DataLoader
@@ -59,6 +59,8 @@ def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, pr
         for i, (input_tensor, target_tensor) in enumerate(train_dataloader):
 
             input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
+            print('Input shape is {}'.format(input_tensor.shape))
+            print('Target shape is {}'.format(target_tensor.shape))
 
             loss = train(input_tensor, target_tensor, generator, optimizer)
 
@@ -195,9 +197,10 @@ if __name__ == '__main__':
     dd_loader, train_dataloader, test_dataloader = load_dataset()
 
     embed_dim = 512
-    FConvEncoder = FConvEncoder(dd_loader.vocabulary.n_words, embed_dim=embed_dim)
-    AttnDecoderRNN = AttnDecoderRNN(hidden_size=embed_dim, output_size=dd_loader.vocabulary.n_words)
-    Generator = Generator(FConvEncoder, AttnDecoderRNN)
 
-    trainIters(Generator, train_dataloader, test_dataloader, num_epochs=30)
+    ConvEncoder = FConvEncoder(dd_loader.vocabulary.n_words, embed_dim=embed_dim)
+    AttnDecoderRNN = AttnDecoderRNN(hidden_size=embed_dim, output_size=dd_loader.vocabulary.n_words)
+    CG = ConvGenerator(ConvEncoder, AttnDecoderRNN).to(DEVICE)
+
+    trainIters(CG, train_dataloader, test_dataloader, num_epochs=30)
 

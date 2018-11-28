@@ -2,6 +2,7 @@ import torch.nn as nn
 from models.conv_tbc import ConvTBC
 from models.grad_multiply import GradMultiply
 import math
+import torch
 import torch.nn.functional as F
 
 
@@ -9,19 +10,17 @@ class FConvEncoder(nn.Module):
     """Convolutional encoder"""
 
 
-    def __init__(self, vocab_size, embed_dim=512, convolutions=((512, 3),) * 5,
+    def __init__(self, vocab_size, embed_dim=1024, convolutions=((512, 3),) * 5,
                  dropout=0.1):
 
         super(FConvEncoder, self).__init__()
 
         self.dropout = dropout
 
-        # TODO, dit is afhankelijk van de decoder
-        self.num_attention_layers = 1
-
         self.embed_tokens = nn.Embedding(vocab_size, embed_dim)
 
         convolutions = extend_conv_spec(convolutions)
+
         in_channels = convolutions[0][0]
 
         self.fc1 = nn.Linear(embed_dim, in_channels)
@@ -103,12 +102,13 @@ class FConvEncoder(nn.Module):
         x = self.fc2(x)
 
         # scale gradients (this only affects backward, not forward)
-        x = GradMultiply.apply(x, 1.0 / (2.0 * self.num_attention_layers))
+        # Set self.num_attention_layers = 1 if line below needed
+        # x = GradMultiply.apply(x, 1.0 / (2.0 * self.num_attention_layers))
 
         # add output to input embedding for attention
         y = (x + input_embedding) * math.sqrt(0.5)
 
-        return y, x
+        return y
 
 
 def ConvTBC_(in_channels, out_channels, kernel_size, dropout=0, **kwargs):
@@ -135,3 +135,15 @@ def extend_conv_spec(convolutions):
         else:
             raise Exception('invalid number of parameters in convolution spec ' + str(spec) + '. expected 2 or 3')
     return tuple(extended)
+
+if __name__ == '__main__':
+
+    batch_size = 16
+    vocab_size = 399
+    sequence_length = 40
+    input_ = torch.empty(batch_size, sequence_length).random_(0, vocab_size).type(torch.LongTensor)
+    ConvEncoder = FConvEncoder(vocab_size)
+    print(input_.shape)
+
+    output = ConvEncoder.forward(input_)
+    print(output.shape)

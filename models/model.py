@@ -90,6 +90,9 @@ class DecoderRNN(nn.Module):
         self.relu = nn.ReLU()
 
     def forward(self, input, hidden, encoder_outputs):
+        if hidden is None:
+            hidden = self.initHidden()
+
         batch_size = input.shape[0]
         output = self.embedding(input).view(1, batch_size, -1)
         output = self.relu(output)
@@ -97,8 +100,8 @@ class DecoderRNN(nn.Module):
         output = self.out(output[0])
         return output, hidden, None
 
-    def initHidden(self):
-        return torch.zeros(1, 1, self.hidden_size, device=self.device)
+    def initHidden(self, batch_size=1):
+        return torch.zeros(1, batch_size, self.hidden_size, device=self.device)
 
 class AttnDecoderRNN(nn.Module):
     def __init__(self, hidden_size, output_size, dropout_p=0.1, max_length=MAX_LENGTH):
@@ -121,6 +124,11 @@ class AttnDecoderRNN(nn.Module):
 
     def forward(self, input, hidden, encoder_outputs):
         batch_size = input.shape[0]
+
+        if hidden is None:
+            hidden = self.initHidden(batch_size=batch_size)
+
+
         embedded = self.embedding(input).view(1, batch_size, -1)
         embedded = self.dropout(embedded)
 
@@ -147,5 +155,5 @@ class AttnDecoderRNN(nn.Module):
 
         return output, hidden, attn_weights
 
-    def initHidden(self):
-        return torch.zeros(1, 1, self.hidden_size, device=self.device)
+    def initHidden(self, batch_size=1):
+        return torch.zeros(1, batch_size, self.hidden_size, device=self.device)
