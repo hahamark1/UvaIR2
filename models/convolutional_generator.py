@@ -3,9 +3,10 @@ from constants import *
 import random
 
 
-class ConvGenerator(nn.Module):
-    def __init__(self, encoder, decoder, max_length=MAX_LENGTH, criterion=nn.NLLLoss()):
-        super(ConvGenerator, self).__init__()
+class ConvEncoderRNNDecoder(nn.Module):
+    def __init__(self, encoder, decoder, max_length=MAX_LENGTH, criterion=nn.CrossEntropyLoss(ignore_index=0)):
+
+        super(ConvEncoderRNNDecoder, self).__init__()
         self.encoder = encoder
         self.decoder = decoder
         self.max_length = max_length
@@ -20,11 +21,14 @@ class ConvGenerator(nn.Module):
 
         loss = 0
 
+        encoder_outputs = torch.zeros(self.max_length, batch_size, self.encoder.hidden_size, device=DEVICE)
         encoder_hidden = self.encoder.forward(input_tensor).transpose(0, 1)
-        print(encoder_hidden.shape)
+
+        for ei in range(input_length):
+            encoder_outputs[ei, :, :] = encoder_hidden[ei, :, :]
 
         decoder_input = torch.tensor([[SOS_INDEX] * batch_size], device=DEVICE).transpose(0, 1)
-        decoder_hidden = encoder_hidden
+        decoder_hidden = encoder_hidden[-1, :, :].unsqueeze(0)
 
         use_teacher_forcing = True if random.random() < TEACHER_FORCING_RATIO else False
 
@@ -32,7 +36,7 @@ class ConvGenerator(nn.Module):
             # Teacher forcing: Feed the target as the next input
             for di in range(target_length):
                 decoder_output, decoder_hidden, _ = self.decoder(
-                    decoder_input, decoder_hidden, encoder_hidden)
+                    decoder_input, decoder_hidden, encoder_outputs)
                 loss += self.criterion(decoder_output, target_tensor[:, di])
                 decoder_input = target_tensor[:, di]  # Teacher forcing
 
@@ -40,7 +44,7 @@ class ConvGenerator(nn.Module):
             # Without teacher forcing: use its own predictions as the next input
             for di in range(target_length):
                 decoder_output, decoder_hidden, _ = self.decoder(
-                    decoder_input, decoder_hidden, encoder_hidden)
+                    decoder_input, decoder_hidden, encoder_outputs)
                 topv, topi = decoder_output.topk(1)
                 decoder_input = topi.squeeze().detach()  # detach from history as input
 

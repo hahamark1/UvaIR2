@@ -3,7 +3,7 @@ from models.convolutional_encoder import FConvEncoder
 import torch.optim as optim
 import torch.nn as nn
 from models.model import AttnDecoderRNN
-from models.convolutional_generator import ConvGenerator
+from models.convolutional_generator import ConvEncoderRNNDecoder
 from constants import *
 from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
 from torch.utils.data import DataLoader
@@ -12,12 +12,15 @@ from utils.seq2seq_helper_funcs import plot_blue_score, plot_epoch_loss
 from evaluation.BlueEvaluator import BlueEvaluator
 
 
+def load_model():
+    return torch.load(os.path.join('saved_models', 'conv_encoder_rnn_decoder_{}.pt'.format(MAX_UTTERENCE_LENGTH)))
+
 def load_dataset():
     """ Load the training and test sets """
 
 
     train_dd_loader = DailyDialogLoader(PATH_TO_TRAIN_DATA, load=False)
-    train_dataloader = DataLoader(train_dd_loader, batch_size=16, shuffle=True, num_workers=0,
+    train_dataloader = DataLoader(train_dd_loader, batch_size=64, shuffle=True, num_workers=0,
                             collate_fn=PadCollate(pad_front=True))
 
     test_dd_loader = DailyDialogLoader(PATH_TO_TEST_DATA, load=True)
@@ -34,6 +37,7 @@ def train(input_tensor, target_tensor, generator, optimizer):
     optimizer.zero_grad()
     loss = generator(input_tensor, target_tensor)
     loss.backward()
+    nn.utils.clip_grad_norm_(generator.parameters(), max_norm=0.1)
     optimizer.step()
     target_length = target_tensor.shape[1]
 
@@ -41,10 +45,10 @@ def train(input_tensor, target_tensor, generator, optimizer):
 
 
 def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, print_every=100,
-               evaluate_every=100, save_every=100, learning_rate=0.001):
+               evaluate_every=100, save_every=1000, learning_rate=0.25):
 
-    optimizer = optim.RMSprop(generator.parameters(), lr=learning_rate)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.9)
+    optimizer = optim.SGD(generator.parameters(), lr=learning_rate, momentum=0.99, nesterov=True)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=3, threshold=0.5, min_lr=1e-4, verbose=True)
 
     num_iters = len(train_dataloader)
     iter = 0
@@ -59,9 +63,6 @@ def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, pr
         for i, (input_tensor, target_tensor) in enumerate(train_dataloader):
 
             input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
-            print('Input shape is {}'.format(input_tensor.shape))
-            print('Target shape is {}'.format(target_tensor.shape))
-
             loss = train(input_tensor, target_tensor, generator, optimizer)
 
             iter_loss += loss
@@ -92,13 +93,12 @@ def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, pr
                 print('-----------------------------')
 
             if num_iters % save_every == 0 and num_iters > 0:
-                torch.save(generator, os.path.join('saved_models', 'generator_{}.pt'.format(MAX_UTTERENCE_LENGTH)))
+                torch.save(generator, os.path.join('saved_models', 'conv_encoder_rnn_decoder_{}.pt'.format(MAX_UTTERENCE_LENGTH)))
 
             num_iters += 1
             iter += 1
 
-        scheduler.step()
-
+        scheduler.step(epoch_loss)
         epoch_loss_avg = epoch_loss / i
         losses.append((epoch_loss_avg))
         print('After epoch {} the loss is {}'.format(epoch, epoch_loss_avg))
@@ -116,15 +116,13 @@ def evaluate(encoder, decoder, input_tensor, max_length=MAX_LENGTH):
         input_length = input_tensor.shape[1]
 
         encoder_outputs = torch.zeros(max_length, 1, encoder.hidden_size, device=DEVICE)
-        encoder_hidden = None
+        encoder_hidden = encoder.forward(input_tensor).transpose(0, 1)
 
         for ei in range(input_length):
-            encoder_output, encoder_hidden = encoder(input_tensor[:, ei], encoder_hidden)
-            encoder_outputs[ei, :, :] = encoder_output[0, :, :]
+            encoder_outputs[ei, :, :] = encoder_hidden[ei, :, :]
 
-        decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).view(-1, 1)  # SOS
-
-        decoder_hidden = encoder_hidden
+        decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).transpose(0, 1)
+        decoder_hidden = encoder_hidden[-1, :, :].unsqueeze(0)
 
         decoded_words = []
 
@@ -161,15 +159,13 @@ def evaluate_test_set(generator, test_dataloader, max_length=MAX_LENGTH):
             input_length = input_tensor.shape[1]
 
             encoder_outputs = torch.zeros(max_length, batch_size, encoder.hidden_size, device=DEVICE)
-            encoder_hidden = None
+            encoder_hidden = encoder.forward(input_tensor).transpose(0, 1)
 
             for ei in range(input_length):
-                encoder_output, encoder_hidden = encoder(input_tensor[:, ei], encoder_hidden)
-                encoder_outputs[ei, :, :] = encoder_output[0, :, :]
+                encoder_outputs[ei, :, :] = encoder_hidden[ei, :, :]
 
-            decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).view(-1, 1)  # SOS
-
-            decoder_hidden = encoder_hidden
+            decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).transpose(0, 1)
+            decoder_hidden = encoder_hidden[-1, :, :].unsqueeze(0)
 
             decoded_words = []
 
@@ -198,9 +194,13 @@ if __name__ == '__main__':
 
     embed_dim = 512
 
-    ConvEncoder = FConvEncoder(dd_loader.vocabulary.n_words, embed_dim=embed_dim)
-    AttnDecoderRNN = AttnDecoderRNN(hidden_size=embed_dim, output_size=dd_loader.vocabulary.n_words)
-    CG = ConvGenerator(ConvEncoder, AttnDecoderRNN).to(DEVICE)
+    try:
+        CG = load_model()
+        print('Succesfully loaded the model')
+    except:
+        ConvEncoder = FConvEncoder(dd_loader.vocabulary.n_words, embed_dim=embed_dim)
+        AttnDecoderRNN = AttnDecoderRNN(hidden_size=embed_dim, output_size=dd_loader.vocabulary.n_words)
+        CERD = ConvEncoderRNNDecoder(ConvEncoder, AttnDecoderRNN, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False)).to(DEVICE)
 
-    trainIters(CG, train_dataloader, test_dataloader, num_epochs=30)
+    trainIters(CERD, train_dataloader, test_dataloader, num_epochs=1000)
 

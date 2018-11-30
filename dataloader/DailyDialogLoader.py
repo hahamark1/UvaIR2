@@ -175,6 +175,7 @@ class DailyDialogLoader(Dataset):
 		self.read_txt(utterance_length=N_UTTERANCES_FOR_INPUT)
 		self.read_txt(utterance_length=N_UTTERANCES_FOR_INPUT+1)
 		self.read_txt(utterance_length=N_UTTERANCES_FOR_INPUT+2)
+		self.read_txt(utterance_length=N_UTTERANCES_FOR_INPUT+3)
 		self.fill_vocabulary()
 		self.convert_to_onehot()
 		self.split_inputs_targets()

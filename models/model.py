@@ -125,10 +125,6 @@ class AttnDecoderRNN(nn.Module):
     def forward(self, input, hidden, encoder_outputs):
         batch_size = input.shape[0]
 
-        if hidden is None:
-            hidden = self.initHidden(batch_size=batch_size)
-
-
         embedded = self.embedding(input).view(1, batch_size, -1)
         embedded = self.dropout(embedded)
 
@@ -148,7 +144,7 @@ class AttnDecoderRNN(nn.Module):
 
         output = self.relu(output)
 
-        output, hidden = self.gru(output, hidden)
+        output, hidden = self.gru(output, hidden.contiguous())
 
         output = self.out(output)
         output = output.squeeze(0)

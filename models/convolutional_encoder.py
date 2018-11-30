@@ -10,20 +10,24 @@ class FConvEncoder(nn.Module):
     """Convolutional encoder"""
 
 
-    def __init__(self, vocab_size, embed_dim=1024, convolutions=((512, 3),) * 5,
+    def __init__(self, vocab_size, embed_dim=1024, convolutions=((512, 3),) * 20,
                  dropout=0.1):
 
         super(FConvEncoder, self).__init__()
 
+        self.embed_dim = embed_dim
         self.dropout = dropout
 
         self.embed_tokens = nn.Embedding(vocab_size, embed_dim)
+        self.embed_tokens.weight.data.normal_(mean=0, std=0.1)
 
         convolutions = extend_conv_spec(convolutions)
+        self.hidden_size = convolutions[-1][0]
 
         in_channels = convolutions[0][0]
 
         self.fc1 = nn.Linear(embed_dim, in_channels)
+        self.fc1.bias.data.zero_()
         self.dropout1 = nn.Dropout(p=dropout)
 
         self.projections = nn.ModuleList()
@@ -44,9 +48,15 @@ class FConvEncoder(nn.Module):
                 padding = kernel_size // 2
             else:
                 padding = 0
+
+
+            # self.convolutions.append(
+            #     ConvTBC_(in_channels, out_channels * 2, kernel_size,
+            #             dropout=dropout, padding=padding)
+            # )
+
             self.convolutions.append(
-                ConvTBC_(in_channels, out_channels * 2, kernel_size,
-                        dropout=dropout, padding=padding)
+                nn.Conv1d(in_channels, out_channels * 2, kernel_size, padding=padding)
             )
 
             self.residuals.append(residual)
@@ -54,6 +64,7 @@ class FConvEncoder(nn.Module):
             layer_in_channels.append(out_channels)
 
         self.fc2 = nn.Linear(in_channels, embed_dim)
+        self.fc2.bias.data.zero_()
 
     def forward(self, src_tokens):
 
@@ -64,10 +75,10 @@ class FConvEncoder(nn.Module):
 
         # project to size of convolution
         x = self.fc1(x)
-        x = self.dropout1(x)
 
         # B x T x C -> T x B x C
-        x = x.transpose(0, 1)
+        # x = x.transpose(0, 1)
+        x = x.transpose(1, 2)
 
         residuals = [x]
         # temporal convolutions
@@ -89,21 +100,23 @@ class FConvEncoder(nn.Module):
                 x = F.pad(x, (0, 0, 0, 0, padding_l, padding_r))
                 x = conv(x)
 
-            x = F.glu(x, dim=2)
+            # x = F.glu(x, dim=2)
+            x = F.glu(x, dim=1)
 
             if residual is not None:
                 x = (x + residual) * math.sqrt(0.5)
             residuals.append(x)
 
         # T x B x C -> B x T x C
-        x = x.transpose(1, 0)
+        # x = x.transpose(1, 0)
+        x = x.transpose(1, 2)
 
         # project back to size of embedding
         x = self.fc2(x)
 
         # scale gradients (this only affects backward, not forward)
         # Set self.num_attention_layers = 1 if line below needed
-        # x = GradMultiply.apply(x, 1.0 / (2.0 * self.num_attention_layers))
+        # x = GradMultiply.apply(x, 1.0 / (2.0 * 1))
 
         # add output to input embedding for attention
         y = (x + input_embedding) * math.sqrt(0.5)
