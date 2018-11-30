@@ -78,6 +78,8 @@ class FConvEncoder(nn.Module):
 
         # B x T x C -> T x B x C
         # x = x.transpose(0, 1)
+
+        # B x T x C -> B x C x T
         x = x.transpose(1, 2)
 
         residuals = [x]
@@ -109,7 +111,9 @@ class FConvEncoder(nn.Module):
 
         # T x B x C -> B x T x C
         # x = x.transpose(1, 0)
-        x = x.transpose(1, 2)
+
+        # B x C x T -> B x T x C
+        x = x.transpose(2, 1)
 
         # project back to size of embedding
         x = self.fc2(x)

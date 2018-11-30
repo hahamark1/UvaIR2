@@ -195,7 +195,7 @@ if __name__ == '__main__':
     embed_dim = 512
 
     try:
-        CG = load_model()
+        CERD = load_model()
         print('Succesfully loaded the model')
     except:
         ConvEncoder = FConvEncoder(dd_loader.vocabulary.n_words, embed_dim=embed_dim)
