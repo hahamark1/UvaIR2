@@ -7,7 +7,7 @@ Created on Dec 1 2018
 
 import torch
 import numpy as np
-from models.model import AttnDecoderRNN, EncoderRNN, DecoderRNN, Generator
+from models.model import AttnDecoderRNN, EncoderRNN, DecoderRNN, DecoderRNNwSoftmax, Generator
 from models.Discriminator import Discriminator
 import random
 import time
@@ -215,14 +215,14 @@ if __name__ == '__main__':
     hidden_size = 256
 
     gen_encoder = EncoderRNN(vocab_size, hidden_size).to(DEVICE)
-    gen_decoder = DecoderRNN(hidden_size, vocab_size).to(DEVICE)
+    gen_decoder = DecoderRNNwSoftmax(hidden_size, vocab_size).to(DEVICE)
     generator = Generator(gen_encoder, gen_decoder, criterion=nn.NLLLoss(ignore_index=0))
 
     disc_encoder = EncoderRNN(vocab_size, hidden_size).to(DEVICE)
     disc_decoder = DecoderRNN(hidden_size, vocab_size).to(DEVICE)
     discriminator = Discriminator(disc_encoder, disc_decoder, hidden_size, vocab_size).to(DEVICE)
 
-    gen_pre_train_epochs = 0
-    disc_pre_train_epochs = 100
+    gen_pre_train_epochs = 100
+    disc_pre_train_epochs = 50
 
     run_training(generator, discriminator, dataloader, gen_pre_train_epochs, disc_pre_train_epochs)

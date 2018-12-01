@@ -48,7 +48,7 @@ class Discriminator(nn.Module):
 			for word in range(decoder_outputs.shape[1]):
 				out_probabilities[batch, word] = decoder_outputs[batch, word, input_tensor[batch, word].item()]
 
-		target = torch.ones(input_tensor.shape, device=DEVICE) * ((float(true_sample)-0.5)*2)
+		target = torch.ones(input_tensor.shape, device=DEVICE) * int(true_sample)
 		loss = self.loss_fnc(out_probabilities, target)
 		
 		return loss, out_probabilities
