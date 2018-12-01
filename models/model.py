@@ -38,7 +38,6 @@ class Generator(nn.Module):
 
         use_teacher_forcing = True if random.random() < TEACHER_FORCING_RATIO else False
 
-
         if use_teacher_forcing:
             # Teacher forcing: Feed the target as the next input
             for di in range(target_length):
@@ -57,10 +56,46 @@ class Generator(nn.Module):
 
                 decoder_input = topi.squeeze().detach()  # detach from history as input
                 loss += self.criterion(decoder_output, target_tensor[:, di])
-        
+
         # generator_output = generator_output.view(batch_size, target_length)
         generator_output = generator_output.permute(1, 0)
         return loss, generator_output
+
+    def generate_sentence(self, context_tensor):
+        
+        context_length = context_tensor.shape[1]      
+
+        # Initialize an empty tensor for the outputs of the encoder
+        encoder_outputs = torch.zeros(context_length, 1, self.encoder.hidden_size, device=DEVICE)
+        encoder_hidden = None
+
+        for ei in range(context_length):
+            encoder_output, encoder_hidden = self.encoder(context_tensor[:, ei], encoder_hidden)
+            encoder_outputs[ei, :, :] = encoder_output[0, :, :]
+
+        decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).view(-1, 1)  # SOS
+        decoder_hidden = encoder_hidden
+
+        decoded_words = []
+        generator_output = torch.zeros(MAX_WORDS_GEN, device=DEVICE).long()
+
+        for di in range(MAX_WORDS_GEN):
+            decoder_output, decoder_hidden, _ = self.decoder(decoder_input, decoder_hidden, encoder_outputs)
+            
+            topv, topi = decoder_output.data.topk(1)
+            generator_output[di] = topi.view(-1)
+
+            if topi.item() == EOS_INDEX:
+                decoded_words.append(EOS_INDEX)
+                generator_output = generator_output[:di+1]
+                break
+            else:
+                decoded_words.append(topi.item())
+            
+            decoder_input = topi.detach()
+
+        return decoded_words, generator_output
+
 
 class EncoderRNN(nn.Module):
     def __init__(self, input_size, hidden_size):
@@ -90,7 +125,7 @@ class DecoderRNN(nn.Module):
         self.embedding = nn.Embedding(output_size, hidden_size)
         self.gru = nn.GRU(hidden_size, hidden_size)
         self.out = nn.Linear(hidden_size, output_size)
-        self.softmax = nn.LogSoftmax(dim=1)
+        self.softmax = nn.Softmax(dim=1)
         self.device = DEVICE
         self.relu = nn.ReLU()
 
@@ -99,6 +134,7 @@ class DecoderRNN(nn.Module):
         output = self.embedding(input).view(1, batch_size, -1)
         output = self.relu(output)
         output, hidden = self.gru(output, hidden)
+        # output = self.out(output[0])
         output = self.softmax(self.out(output[0]))
         return output, hidden, None
 
@@ -149,6 +185,7 @@ class AttnDecoderRNN(nn.Module):
         output, hidden = self.gru(output, hidden)
 
         output = self.softmax(self.out(output))
+        # output = self.out(output)
         output = output.squeeze(0)
 
         return output, hidden, attn_weights

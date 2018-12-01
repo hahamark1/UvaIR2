@@ -6,10 +6,10 @@ MAX_WORDS_GEN = 10
 # Cuda constants
 DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
-MAX_UTTERENCE_LENGTH = 25
-MAX_LENGTH = 35
+MAX_UTTERENCE_LENGTH = 15
+MAX_LENGTH = 20
 
-TEACHER_FORCING_RATIO = 0.0
+TEACHER_FORCING_RATIO = 0.5
 
 # Vocabulary preprocessing tokens
 PADDING_TOKEN = '__PADDING__'
