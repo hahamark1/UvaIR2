@@ -9,7 +9,7 @@ DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 MAX_UTTERENCE_LENGTH = 15
 MAX_LENGTH = 20
 
-TEACHER_FORCING_RATIO = 0.5
+TEACHER_FORCING_RATIO = 0.0
 
 # Vocabulary preprocessing tokens
 PADDING_TOKEN = '__PADDING__'

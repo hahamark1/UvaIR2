@@ -30,23 +30,6 @@ GEN_LEARNING_RATE = 0.001
 DISC_LEARNING_RATE = 0.01
 
 
-
-def indexesFromSentence(lang, sentence):
-    return [lang.word2index[word] for word in sentence.split(' ')]
-
-
-def tensorFromSentence(lang, sentence, question=False):
-    indexes = indexesFromSentence(lang, sentence)
-
-    if question:
-        indexes.append(EOU_token)
-    else:
-        indexes.append(EOS_token)
-    return torch.tensor(indexes, dtype=torch.long, device=DEVICE).view(-1, 1)
-
-
-
-
 def pretrain_generator(input_tensor, target_tensor, generator, gen_optimizer):
     gen_optimizer.zero_grad()
 
@@ -101,6 +84,7 @@ def train(input_tensor, target_tensor, generator, discriminator, adverserial_los
 
     # Update the generator (if necessary) based on the discriminator rewards
     if train_generator:
+        # TODO: change this into a REINFORCE loss?
         adv_loss = adverserial_loss(disc_generated, torch.ones(disc_generated.shape, device=DEVICE))
         adv_loss.backward()
         gen_optimizer.step()
@@ -179,21 +163,26 @@ def evaluate(generator, discriminator, context_tensor, target_sentence):
     with torch.no_grad():
         context_tensor = context_tensor.view(1, -1)
 
+        # Generate a sentence given the context
         generated_sentence, generator_output = generator.generate_sentence(context_tensor)
 
         generator_output = torch.unsqueeze(generator_output, dim=0)
         target_sentence = torch.unsqueeze(target_sentence, dim=0)
 
+        # Determine the discriminator outputs for both the true and the generated reply
         _, disc_out_gen = discriminator(context_tensor, generator_output, true_sample=False)
         _, disc_out_true = discriminator(context_tensor, target_sentence, true_sample=True)
 
+        # Find the mean of these values (discriminator output is a probability per word in the reply)
         mean_disc_out_gen = torch.mean(disc_out_gen).item()
         mean_disc_out_true = torch.mean(disc_out_true).item()
         
+        # Convert the tensors to readable sentences
         real_context = dataloader.dataset.vocabulary.list_to_sent(np.array(context_tensor[0]))
         real_reply = dataloader.dataset.vocabulary.list_to_sent(np.array(target_sentence[0]))
         generated_sentence = dataloader.dataset.vocabulary.list_to_sent(generated_sentence)
 
+        # Print the results
         print()
         print(real_context)
         print('>>')
@@ -214,14 +203,17 @@ if __name__ == '__main__':
     vocab_size = dd_loader.vocabulary.n_words
     hidden_size = 256
 
+    # Initialize the generator
     gen_encoder = EncoderRNN(vocab_size, hidden_size).to(DEVICE)
     gen_decoder = DecoderRNNwSoftmax(hidden_size, vocab_size).to(DEVICE)
     generator = Generator(gen_encoder, gen_decoder, criterion=nn.NLLLoss(ignore_index=0))
 
+    # Initialize the discriminator
     disc_encoder = EncoderRNN(vocab_size, hidden_size).to(DEVICE)
     disc_decoder = DecoderRNN(hidden_size, vocab_size).to(DEVICE)
     discriminator = Discriminator(disc_encoder, disc_decoder, hidden_size, vocab_size).to(DEVICE)
 
+    # Number of epochs to pretrain the generator and discriminator, before performing adversarial training
     gen_pre_train_epochs = 100
     disc_pre_train_epochs = 50
 
