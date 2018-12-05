@@ -34,6 +34,7 @@ class FConvEncoder(nn.Module):
 
         self.projections = nn.ModuleList()
         self.convolutions = nn.ModuleList()
+        self.batch_norms = nn.ModuleList()
         self.residuals = []
 
         layer_in_channels = [in_channels]
@@ -61,6 +62,8 @@ class FConvEncoder(nn.Module):
                 nn.Conv1d(in_channels, out_channels * 2, kernel_size, padding=padding)
             )
 
+            self.batch_norms.append(nn.BatchNorm1d(out_channels * 2))
+
             self.residuals.append(residual)
             in_channels = out_channels
             layer_in_channels.append(out_channels)
@@ -86,7 +89,7 @@ class FConvEncoder(nn.Module):
 
         residuals = [x]
         # temporal convolutions
-        for proj, conv, res_layer in zip(self.projections, self.convolutions, self.residuals):
+        for proj, conv, norm, res_layer in zip(self.projections, self.convolutions, self.batch_norms, self.residuals):
             if res_layer > 0:
                 residual = residuals[-res_layer]
                 residual = residual if proj is None else proj(residual)
@@ -103,6 +106,8 @@ class FConvEncoder(nn.Module):
                 padding_r = conv.kernel_size[0] // 2
                 x = F.pad(x, (0, 0, 0, 0, padding_l, padding_r))
                 x = conv(x)
+
+            x = norm(x)
 
             # x = F.glu(x, dim=2)
             x = F.glu(x, dim=1)

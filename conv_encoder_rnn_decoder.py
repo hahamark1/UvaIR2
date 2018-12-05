@@ -111,6 +111,10 @@ def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, pr
 
 
 def evaluate(encoder, decoder, input_tensor, max_length=MAX_LENGTH):
+
+    encoder.eval()
+    decoder.eval()
+
     with torch.no_grad():
 
         input_tensor = input_tensor.view(1, -1)
@@ -139,7 +143,10 @@ def evaluate(encoder, decoder, input_tensor, max_length=MAX_LENGTH):
 
             decoder_input = topi.detach()
 
-        return decoded_words
+    encoder.train()
+    decoder.train()
+
+    return decoded_words
 
 def evaluate_test_set(generator, test_dataloader, max_length=MAX_LENGTH):
 
@@ -163,7 +170,7 @@ def evaluate_test_set(generator, test_dataloader, max_length=MAX_LENGTH):
             encoder_hidden = encoder.forward(input_tensor).transpose(0, 1)
 
             for ei in range(input_length):
-                encoder_outputs[ei, :, :] = encoder_hidden[ei, :, :]
+                encoder_outputs[ei + (max_length - input_length), :, :] = encoder_hidden[ei, :, :]
 
             decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).transpose(0, 1)
             decoder_hidden = encoder_hidden[-1, :, :].unsqueeze(0)
