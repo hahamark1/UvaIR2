@@ -15,7 +15,7 @@ from utils.seq2seq_helper_funcs import showPlot, asMinutes, timeSince
 import torch.optim as optim
 import torch.nn as nn
 from constants import *
-from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
+from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate, TransDataLoader
 from torch.utils.data import Dataset, DataLoader
 import os
 
@@ -86,9 +86,10 @@ def train(input_tensor, target_tensor, generator, discriminator, adverserial_los
     if train_generator:
         # TODO: change this into a REINFORCE loss?
         adv_loss = adverserial_loss(disc_generated, torch.ones(disc_generated.shape, device=DEVICE))
-        adv_loss.backward()
+        total_gen_loss = gen_loss * adv_loss
+        total_gen_loss.backward()
         gen_optimizer.step()
-        loss = adv_loss.item() + disc_loss.item()
+        loss = total_gen_loss.item() + disc_loss.item()
     else:
         loss = disc_loss.item()
         adv_loss = 0
@@ -184,10 +185,11 @@ def evaluate(generator, discriminator, context_tensor, target_sentence):
 
         # Print the results
         print()
+        print('CONTEXT')
         print(real_context)
-        print('>>')
+        print('GENERATED REPLY')
         print(generated_sentence)
-        print('==')
+        print('TRUE REPLY')
         print(real_reply)
         print('---------')
         print('Disc(0): {:3.2f} Disc(1): {:3.2f}'.format(mean_disc_out_gen, mean_disc_out_true))
@@ -214,7 +216,7 @@ if __name__ == '__main__':
     discriminator = Discriminator(disc_encoder, disc_decoder, hidden_size, vocab_size).to(DEVICE)
 
     # Number of epochs to pretrain the generator and discriminator, before performing adversarial training
-    gen_pre_train_epochs = 100
-    disc_pre_train_epochs = 50
+    gen_pre_train_epochs = 10
+    disc_pre_train_epochs = 5
 
     run_training(generator, discriminator, dataloader, gen_pre_train_epochs, disc_pre_train_epochs)
