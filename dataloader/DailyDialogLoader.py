@@ -226,7 +226,7 @@ class DailyDialogLoader(Dataset):
 					question = ' {} '.format(self.eou_token).join(utterances[index:index+utterance_length])
 					question = '{} {}'.format(self.sos_token, question).strip()
 
-					target = utterances[index + utterance_length + 1]
+					target = utterances[index + utterance_length]
 					target = '{} {}'.format(target, self.eos_token).strip()
 
 					dialogues.append((question, target))
@@ -270,8 +270,8 @@ class PadCollate:
 	a batch of sequences
 	"""
 
-	def __init__(self, pad_front=True):
-		self.pad_front = pad_front
+	def __init__(self):
+		pass
 
 	def pad_collate(self, batch):
 		"""
@@ -288,8 +288,8 @@ class PadCollate:
 		max_target_length = max([len(input_target_pair[1]) for input_target_pair in batch])
 
 		# Pad 'm
-		batch = [[self.pad_tensor(input_target_pair[0], max_input_length), \
-				 self.pad_tensor(input_target_pair[1], max_target_length)] \
+		batch = [[self.pad_tensor(input_target_pair[0], max_input_length, pad_front=True), \
+				 self.pad_tensor(input_target_pair[1], max_target_length, pad_front=False)] \
 					for input_target_pair in batch]
 
 		# Stack the inputs together and the targets together
@@ -298,7 +298,7 @@ class PadCollate:
 
 		return inputs, targets
 
-	def pad_tensor(self, vec, pad):
+	def pad_tensor(self, vec, pad, pad_front):
 		"""
 		args:
 		    vec - tensor to pad
@@ -312,7 +312,7 @@ class PadCollate:
 
 		vec = vec.type(torch.LongTensor)
 
-		if self.pad_front:
+		if pad_front:
 			return torch.cat([torch.zeros(*pad_size).type(torch.LongTensor), vec], dim=0)
 		else:
 			return torch.cat([vec, torch.zeros(*pad_size).type(torch.LongTensor)], dim=0)

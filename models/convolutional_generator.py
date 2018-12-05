@@ -25,7 +25,7 @@ class ConvEncoderRNNDecoder(nn.Module):
         encoder_hidden = self.encoder.forward(input_tensor).transpose(0, 1)
 
         for ei in range(input_length):
-            encoder_outputs[ei, :, :] = encoder_hidden[ei, :, :]
+            encoder_outputs[ei + (self.max_length - input_length), :, :] = encoder_hidden[ei, :, :]
 
         decoder_input = torch.tensor([[SOS_INDEX] * batch_size], device=DEVICE).transpose(0, 1)
         decoder_hidden = encoder_hidden[-1, :, :].unsqueeze(0)

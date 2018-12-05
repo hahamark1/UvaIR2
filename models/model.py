@@ -111,7 +111,7 @@ class AttnDecoderRNN(nn.Module):
         self.dropout_p = dropout_p
         self.max_length = max_length
 
-        self.embedding = nn.Embedding(self.output_size, self.hidden_size)
+        self.embedding = nn.Embedding(self.output_size, self.hidden_size, padding_idx=PADDING_INDEX)
         self.attn = nn.Linear(self.hidden_size * 2, self.max_length)
         self.attn_combine = nn.Linear(self.hidden_size * 2, self.hidden_size)
         self.dropout = nn.Dropout(self.dropout_p)
@@ -153,3 +153,8 @@ class AttnDecoderRNN(nn.Module):
 
     def initHidden(self, batch_size=1):
         return torch.zeros(1, batch_size, self.hidden_size, device=self.device)
+
+
+if __name__ == '__main__':
+
+    ADR = AttnDecoderRNN(512, 1000)

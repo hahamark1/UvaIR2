@@ -20,12 +20,12 @@ def load_dataset():
 
 
     train_dd_loader = DailyDialogLoader(PATH_TO_TRAIN_DATA, load=False)
-    train_dataloader = DataLoader(train_dd_loader, batch_size=64, shuffle=True, num_workers=0,
-                            collate_fn=PadCollate(pad_front=True))
+    train_dataloader = DataLoader(train_dd_loader, batch_size=16, shuffle=True, num_workers=0,
+                            collate_fn=PadCollate())
 
     test_dd_loader = DailyDialogLoader(PATH_TO_TEST_DATA, load=True)
     test_dataloader = DataLoader(test_dd_loader, batch_size=1, shuffle=False, num_workers=0,
-                            collate_fn=PadCollate(pad_front=True))
+                            collate_fn=PadCollate())
 
     assert train_dd_loader.vocabulary.n_words == test_dd_loader.vocabulary.n_words
 
@@ -48,6 +48,7 @@ def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, pr
                evaluate_every=100, save_every=1000, learning_rate=0.25):
 
     optimizer = optim.SGD(generator.parameters(), lr=learning_rate, momentum=0.99, nesterov=True)
+
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=3, threshold=0.5, min_lr=1e-4, verbose=True)
 
     num_iters = len(train_dataloader)
@@ -119,7 +120,7 @@ def evaluate(encoder, decoder, input_tensor, max_length=MAX_LENGTH):
         encoder_hidden = encoder.forward(input_tensor).transpose(0, 1)
 
         for ei in range(input_length):
-            encoder_outputs[ei, :, :] = encoder_hidden[ei, :, :]
+            encoder_outputs[ei + max_length - input_length, :, :] = encoder_hidden[ei, :, :]
 
         decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).transpose(0, 1)
         decoder_hidden = encoder_hidden[-1, :, :].unsqueeze(0)

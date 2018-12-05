@@ -4,6 +4,7 @@ from models.grad_multiply import GradMultiply
 import math
 import torch
 import torch.nn.functional as F
+from constants import *
 
 
 class FConvEncoder(nn.Module):
@@ -18,8 +19,9 @@ class FConvEncoder(nn.Module):
         self.embed_dim = embed_dim
         self.dropout = dropout
 
-        self.embed_tokens = nn.Embedding(vocab_size, embed_dim)
+        self.embed_tokens = nn.Embedding(vocab_size, embed_dim, padding_idx=PADDING_INDEX)
         self.embed_tokens.weight.data.normal_(mean=0, std=0.1)
+        self.embed_tokens.weight[0].data.zero_()
 
         convolutions = extend_conv_spec(convolutions)
         self.hidden_size = convolutions[-1][0]
