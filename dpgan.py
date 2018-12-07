@@ -15,7 +15,7 @@ from utils.seq2seq_helper_funcs import showPlot, asMinutes, timeSince
 import torch.optim as optim
 import torch.nn as nn
 from constants import *
-from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate, TransDataLoader
+from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
 from torch.utils.data import Dataset, DataLoader
 import os
 
@@ -27,7 +27,7 @@ SAVE_EVERY = 1000
 TRAIN_GENERATOR_EVERY = 5
 
 GEN_LEARNING_RATE = 0.001
-DISC_LEARNING_RATE = 0.01
+DISC_LEARNING_RATE = 0.001
 
 
 def pretrain_generator(input_tensor, target_tensor, generator, gen_optimizer):
@@ -40,14 +40,11 @@ def pretrain_generator(input_tensor, target_tensor, generator, gen_optimizer):
     gen_loss.backward()
     gen_optimizer.step()
 
-    return gen_loss
+    return gen_loss, generated_sentence
 
 
-def pretrain_discriminator(input_tensor, target_tensor, generator, discriminator, disc_optimizer):
+def pretrain_discriminator(input_tensor, target_tensor, generated_sentence, discriminator, disc_optimizer):
     disc_optimizer.zero_grad()
-    
-    # Generate a sentence to create an example for the discriminator
-    _, generated_sentence = generator(input_tensor, target_tensor)
     
     # Determine the discriminator loss for both the true sample and the generated sample
     generated_disc_loss, generated_disc_out = discriminator(input_tensor, generated_sentence, true_sample=False)
@@ -84,7 +81,6 @@ def train(input_tensor, target_tensor, generator, discriminator, adverserial_los
 
     # Update the generator (if necessary) based on the discriminator rewards
     if train_generator:
-        # TODO: change this into a REINFORCE loss?
         adv_loss = adverserial_loss(disc_generated, torch.ones(disc_generated.shape, device=DEVICE))
         total_gen_loss = gen_loss * adv_loss
         total_gen_loss.backward()
@@ -105,33 +101,34 @@ def print_info(total_gen_loss, total_disc_loss, epoch, iteration):
                             epoch, iteration, avg_gen_loss, avg_disc_loss))
 
 
-def run_training(generator, discriminator, dataloader, gen_pre_train_epochs, disc_pre_train_epochs):
+def run_training(generator, discriminator, dataloader, pre_train_epochs):
 
     gen_optimizer = optim.RMSprop(generator.parameters(), lr=GEN_LEARNING_RATE)
     disc_optimizer = optim.RMSprop(discriminator.parameters(), lr=DISC_LEARNING_RATE)
     adverserial_loss = nn.BCELoss()
+
+    scheduler = optim.lr_scheduler.StepLR(gen_optimizer, step_size=10, gamma=0.9)
 
     total_gen_loss = 0
     total_disc_loss = 0
 
     for epoch in range(NUM_EPOCHS):
 
-        pretrain_gen = epoch < gen_pre_train_epochs
-        pretrain_disc = epoch < (gen_pre_train_epochs + disc_pre_train_epochs)
+        pretrain = epoch < pre_train_epochs
+        # pretrain_disc = epoch < (gen_pre_train_epochs + disc_pre_train_epochs)
 
         for i, (input_tensor, target_tensor) in enumerate(dataloader):
             iteration = epoch * len(dataloader) + i
 
             input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
 
-            if pretrain_gen:
+            if pretrain:
                 # Pre-train the generator
-                gen_loss = pretrain_generator(input_tensor, target_tensor, generator, gen_optimizer)
+                gen_loss, generated_sentence = pretrain_generator(input_tensor, target_tensor, generator, gen_optimizer)
                 total_gen_loss += gen_loss
 
-            elif pretrain_disc:
                 # Pre-train the discriminator
-                disc_loss = pretrain_discriminator(input_tensor, target_tensor, generator, discriminator, disc_optimizer)
+                disc_loss = pretrain_discriminator(input_tensor, target_tensor, generated_sentence, discriminator, disc_optimizer)
                 total_disc_loss += disc_loss
 
             else:
@@ -154,8 +151,18 @@ def run_training(generator, discriminator, dataloader, gen_pre_train_epochs, dis
                 evaluate(generator, discriminator, test_sentence, test_target_sentence)
 
             if iteration % SAVE_EVERY == 0 and iteration > 0:
-                torch.save(generator, os.path.join('saved_models', 'generator.pt'))
-                torch.save(discriminator, os.path.join('saved_models', 'discriminator.pt'))
+
+                torch.save({
+                    'epoch': epoch,
+                    'state_dict': generator.state_dict(),
+                    'optimizer' : gen_optimizer.state_dict(),
+                }, os.path.join('saved_models', 'dp_gan_generator.pt'))
+
+                torch.save({
+                    'epoch': epoch,
+                    'state_dict': discriminator.state_dict(),
+                    'optimizer' : disc_optimizer.state_dict(),
+                }, os.path.join('saved_models', 'dp_gan_discriminator.pt'))
 
 
 
@@ -200,15 +207,15 @@ if __name__ == '__main__':
 
     PATH_TO_DATA =  'data/dailydialog/train/dialogues_train.txt'
     dd_loader = DailyDialogLoader(PATH_TO_DATA)
-    dataloader = DataLoader(dd_loader, batch_size=16, shuffle=True, num_workers=0, collate_fn=PadCollate(pad_front=True))
+    dataloader = DataLoader(dd_loader, batch_size=16, shuffle=True, num_workers=0, collate_fn=PadCollate())
 
     vocab_size = dd_loader.vocabulary.n_words
     hidden_size = 256
 
     # Initialize the generator
     gen_encoder = EncoderRNN(vocab_size, hidden_size).to(DEVICE)
-    gen_decoder = DecoderRNNwSoftmax(hidden_size, vocab_size).to(DEVICE)
-    generator = Generator(gen_encoder, gen_decoder, criterion=nn.NLLLoss(ignore_index=0))
+    gen_decoder = AttnDecoderRNN(hidden_size, vocab_size).to(DEVICE)
+    generator = Generator(gen_encoder, gen_decoder, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False))
 
     # Initialize the discriminator
     disc_encoder = EncoderRNN(vocab_size, hidden_size).to(DEVICE)
@@ -216,7 +223,6 @@ if __name__ == '__main__':
     discriminator = Discriminator(disc_encoder, disc_decoder, hidden_size, vocab_size).to(DEVICE)
 
     # Number of epochs to pretrain the generator and discriminator, before performing adversarial training
-    gen_pre_train_epochs = 10
-    disc_pre_train_epochs = 5
+    pre_train_epochs = 10
 
-    run_training(generator, discriminator, dataloader, gen_pre_train_epochs, disc_pre_train_epochs)
+    run_training(generator, discriminator, dataloader, pre_train_epochs)
