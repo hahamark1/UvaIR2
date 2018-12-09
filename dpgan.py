@@ -23,7 +23,7 @@ import os
 NUM_EPOCHS = 1000
 PRINT_EVERY = 50
 EVALUATE_EVERY = 300
-SAVE_EVERY = 1000
+SAVE_EVERY = 300
 TRAIN_GENERATOR_EVERY = 5
 
 GEN_LEARNING_RATE = 0.001
@@ -154,12 +154,14 @@ def run_training(generator, discriminator, dataloader, pre_train_epochs):
 
                 torch.save({
                     'epoch': epoch,
+                    'model': generator,
                     'state_dict': generator.state_dict(),
                     'optimizer' : gen_optimizer.state_dict(),
                 }, os.path.join('saved_models', 'dp_gan_generator.pt'))
 
                 torch.save({
                     'epoch': epoch,
+                    'model': discriminator,
                     'state_dict': discriminator.state_dict(),
                     'optimizer' : disc_optimizer.state_dict(),
                 }, os.path.join('saved_models', 'dp_gan_discriminator.pt'))
