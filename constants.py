@@ -1,4 +1,5 @@
 import torch
+import os
 
 MAX_WORDS_encoder = 150
 MAX_WORDS_GEN = 10
@@ -8,6 +9,9 @@ DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
 MAX_UTTERENCE_LENGTH = 30
 MAX_LENGTH = 30
+
+N_UTTERANCES_FOR_INPUT = 3
+PATH_TO_SAVE = os.path.join('saved_models')	
 
 TEACHER_FORCING_RATIO = 0.5
 

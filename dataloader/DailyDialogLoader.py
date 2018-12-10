@@ -68,7 +68,7 @@ def filterPairs(pairs):
 
 class Vocabulary():
 
-	def __init__(self):
+	def __init__(self, word2index=None, word2count=None, index2word=None):
 
 		self.padding_token = PADDING_TOKEN
 		self.split_token = SPLIT_TOKEN
@@ -78,10 +78,15 @@ class Vocabulary():
 		self.num_token = NUM_TOKEN
 		self.eou_token = EOU_TOKEN
 
-		self.word2index = {PADDING_TOKEN: PADDING_INDEX, SPLIT_TOKEN: SPLIT_INDEX, UNK_TOKEN: UNK_INDEX, SOS_TOKEN: SOS_INDEX, EOS_TOKEN: EOS_INDEX, NUM_TOKEN: NUM_INDEX, EOU_TOKEN: EOU_INDEX}
-		self.word2count = {key: 0 for key in self.word2index.keys()}
-		self.index2word = {self.word2index[key]: key for key in self.word2index.keys()}
-		self.n_words = 7
+		if word2index and word2count and index2word:
+			self.word2index = word2index
+			self.word2count = word2count
+			self.index2word = index2word
+		else:
+			self.word2index = {PADDING_TOKEN: PADDING_INDEX, SPLIT_TOKEN: SPLIT_INDEX, UNK_TOKEN: UNK_INDEX, SOS_TOKEN: SOS_INDEX, EOS_TOKEN: EOS_INDEX, NUM_TOKEN: NUM_INDEX, EOU_TOKEN: EOU_INDEX}
+			self.word2count = {key: 0 for key in self.word2index.keys()}
+			self.index2word = {self.word2index[key]: key for key in self.word2index.keys()}
+		self.n_words = len(self.word2index)
 
 	def add_word(self, word):
 		if word not in self.word2index:
@@ -110,11 +115,11 @@ class Vocabulary():
 
 class DailyDialogLoader(Dataset):
 
-	def __init__(self, path_to_data):
+	def __init__(self, path_to_data, word2index=None, word2count=None, index2word=None):
 		self.path_to_data = path_to_data
 
 		# Initalize a Vocabulary object
-		self.vocabulary = Vocabulary()
+		self.vocabulary = Vocabulary(word2index=word2index, word2count=word2count, index2word=index2word)
 
 		# Initialize the lists in which to store the good stuff
 		self.dialogues = []
@@ -127,7 +132,8 @@ class DailyDialogLoader(Dataset):
 
 		# Execute the functions to load the data
 		self.read_txt()
-		self.fill_vocabulary()
+		if not (word2index and word2count and index2word):
+			self.fill_vocabulary()
 		self.convert_to_onehot()
 		self.split_inputs_targets()
 
@@ -201,7 +207,11 @@ class DailyDialogLoader(Dataset):
 			self.one_hot_dialogues.append((question, answer))
 
 	def word_to_onehot(self, word):
-		return self.vocabulary.word2index[word]
+		try:
+			index = self.vocabulary.word2index[word]
+		except Exception as e:
+			index = self.vocabulary.word2index[self.vocabulary.unk_token]
+		return index
 
 	def split_inputs_targets(self):
 		# Splits the dialogues into inputs and targets

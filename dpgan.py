@@ -7,8 +7,9 @@ Created on Dec 1 2018
 
 import torch
 import numpy as np
-from models.model import AttnDecoderRNN, EncoderRNN, DecoderRNN, DecoderRNNwSoftmax, Generator
+from models.model import AttnDecoderRNN, EncoderRNN, DecoderRNN, Generator
 from models.Discriminator import Discriminator
+from evaluation.BlueEvaluator import BlueEvaluator
 import random
 import time
 from utils.seq2seq_helper_funcs import showPlot, asMinutes, timeSince
@@ -28,6 +29,9 @@ TRAIN_GENERATOR_EVERY = 5
 
 GEN_LEARNING_RATE = 0.001
 DISC_LEARNING_RATE = 0.001
+
+PATH_TO_TRAIN_DATA =  'data/dailydialog/train/dialogues_train.txt'
+PATH_TO_TEST_DATA =  'data/dailydialog/test/dialogues_test.txt'
 
 
 def pretrain_generator(input_tensor, target_tensor, generator, gen_optimizer):
@@ -150,21 +154,21 @@ def run_training(generator, discriminator, dataloader, pre_train_epochs):
                 test_sentence, test_target_sentence = input_tensor[0, :], target_tensor[0, :]
                 evaluate(generator, discriminator, test_sentence, test_target_sentence)
 
-            if iteration % SAVE_EVERY == 0 and iteration > 0:
+            # if iteration % SAVE_EVERY == 0 and iteration > 0:
 
-                torch.save({
-                    'epoch': epoch,
-                    'model': generator,
-                    'state_dict': generator.state_dict(),
-                    'optimizer' : gen_optimizer.state_dict(),
-                }, os.path.join('saved_models', 'dp_gan_generator.pt'))
+            #     torch.save({
+            #         'epoch': epoch,
+            #         'model': generator,
+            #         'state_dict': generator.state_dict(),
+            #         'optimizer' : gen_optimizer.state_dict(),
+            #     }, os.path.join('saved_models', 'dp_gan_generator.pt'))
 
-                torch.save({
-                    'epoch': epoch,
-                    'model': discriminator,
-                    'state_dict': discriminator.state_dict(),
-                    'optimizer' : disc_optimizer.state_dict(),
-                }, os.path.join('saved_models', 'dp_gan_discriminator.pt'))
+            #     torch.save({
+            #         'epoch': epoch,
+            #         'model': discriminator,
+            #         'state_dict': discriminator.state_dict(),
+            #         'optimizer' : disc_optimizer.state_dict(),
+            #     }, os.path.join('saved_models', 'dp_gan_discriminator.pt'))
 
 
 
@@ -205,11 +209,90 @@ def evaluate(generator, discriminator, context_tensor, target_sentence):
         print('______________________________\n\n')
 
 
+def evaluate_test_set(generator, train_dataloader, test_dataloader, max_length=MAX_LENGTH):
+
+    encoder = generator.encoder
+    decoder = generator.decoder
+
+    BLUE = BlueEvaluator(train_dataloader.dataset.vocabulary.index2word)
+
+    scores = []
+
+    with torch.no_grad():
+
+        for i, (input_tensor, target_tensor) in enumerate(test_dataloader):
+
+            input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
+
+            batch_size = input_tensor.shape[0]
+            input_length = input_tensor.shape[1]
+
+            # print('batch size', batch_size)
+            # print('input_length', input_length)
+
+            encoder_outputs = torch.zeros(max_length, batch_size, encoder.hidden_size, device=DEVICE)
+            encoder_hidden = None
+
+            for ei in range(input_length):
+                encoder_output, encoder_hidden = encoder(input_tensor[:, ei], encoder_hidden)
+                encoder_outputs[ei, :, :] = encoder_output[0, :, :]
+
+            decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).view(-1, 1)  # SOS
+            # decoder_input = torch.tensor([[SOS_INDEX] * batch_size], device=DEVICE).transpose(0, 1)
+
+            decoder_hidden = encoder_hidden
+
+            decoded_words = []
+
+            for di in range(MAX_WORDS_GEN):
+                # print('dec in', decoder_input.shape)
+                # print('dec hidden', decoder_hidden.shape)
+                decoder_output, decoder_hidden, _ = decoder(decoder_input, decoder_hidden, encoder_outputs)
+                topv, topi = decoder_output.data.topk(1)
+
+                if topi.item() == EOS_INDEX:
+                    decoded_words.append(EOS_INDEX)
+                    break
+                else:
+                    decoded_words.append(topi.item())
+
+                decoder_input = topi.detach()
+
+            score = BLUE.list_to_blue(decoded_words, target_tensor.cpu().tolist()[0])
+            scores.append(score)
+
+    average_score = sum(scores) / len(scores)
+    return average_score
+
+
+
+def load_dataset():
+    """ Load the training and test sets """
+
+
+    train_dd_loader = DailyDialogLoader(PATH_TO_TRAIN_DATA)
+    train_dataloader = DataLoader(train_dd_loader, batch_size=16, shuffle=True, num_workers=0,
+                            collate_fn=PadCollate())
+
+    test_dd_loader = DailyDialogLoader(PATH_TO_TEST_DATA, word2index=train_dd_loader.vocabulary.word2index, word2count=train_dd_loader.vocabulary.word2count, index2word=train_dd_loader.vocabulary.index2word)
+    test_dataloader = DataLoader(test_dd_loader, batch_size=1, shuffle=False, num_workers=0,
+                            collate_fn=PadCollate())
+
+    # assert train_dd_loader.vocabulary.n_words == test_dd_loader.vocabulary.n_words
+
+    return train_dd_loader, train_dataloader, test_dataloader
+
+
 if __name__ == '__main__':
 
-    PATH_TO_DATA =  'data/dailydialog/train/dialogues_train.txt'
-    dd_loader = DailyDialogLoader(PATH_TO_DATA)
-    dataloader = DataLoader(dd_loader, batch_size=16, shuffle=True, num_workers=0, collate_fn=PadCollate())
+    dd_loader, train_dataloader, test_dataloader = load_dataset()
+    
+    # dd_loader = DailyDialogLoader(PATH_TO_DATA)
+    # dataloader = DataLoader(dd_loader, batch_size=16, shuffle=True, num_workers=0, collate_fn=PadCollate())
+
+    
+    # dd_test_loader = DailyDialogLoader(PATH_TO_TEST_DATA)
+    # test_dataloader = DataLoader(dd_test_loader, batch_size=1, shuffle=True, num_workers=0, collate_fn=PadCollate())
 
     vocab_size = dd_loader.vocabulary.n_words
     hidden_size = 256
@@ -225,6 +308,13 @@ if __name__ == '__main__':
     discriminator = Discriminator(disc_encoder, disc_decoder, hidden_size, vocab_size).to(DEVICE)
 
     # Number of epochs to pretrain the generator and discriminator, before performing adversarial training
-    pre_train_epochs = 10
+    # pre_train_epochs = 10
+    # run_training(generator, discriminator, dataloader, pre_train_epochs)
 
-    run_training(generator, discriminator, dataloader, pre_train_epochs)
+    saved_gen = torch.load('saved_models/dp_gan_generator.pt')
+    saved_disc = torch.load('saved_models/dp_gan_discriminator.pt')
+    generator.load_state_dict(saved_gen['state_dict'])
+    # discriminator.load_state_dict(saved_disc['state_dict'])
+
+    avg_score = evaluate_test_set(generator, train_dataloader, test_dataloader, max_length=MAX_LENGTH)
+    print('avg blue score:', avg_score)
