@@ -10,7 +10,8 @@ from torch.utils.data import DataLoader
 import os
 from utils.seq2seq_helper_funcs import plot_blue_score, plot_epoch_loss
 from evaluation.BlueEvaluator import BlueEvaluator
-
+from nlgeval import NLGEval
+nlgeval = NLGEval()
 
 def load_model():
     return torch.load(os.path.join('saved_models', 'conv_encoder_rnn_decoder_{}.pt'.format(MAX_UTTERENCE_LENGTH)))
@@ -44,12 +45,12 @@ def train(input_tensor, target_tensor, generator, optimizer):
     return loss.item() / target_length
 
 
-def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, print_every=100,
-               evaluate_every=100, save_every=1000, learning_rate=0.25):
+def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, print_every=1000,
+               evaluate_every=1000, save_every=1000, learning_rate=0.25):
 
     optimizer = optim.SGD(generator.parameters(), lr=learning_rate, momentum=0.99, nesterov=True)
 
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=3, threshold=0.5, min_lr=1e-4, verbose=True)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=10, threshold=0.5, min_lr=1e-4, verbose=True)
 
     num_iters = len(train_dataloader)
     iter = 0
@@ -108,6 +109,9 @@ def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, pr
         plot_blue_score(blue_scores)
         plot_epoch_loss(losses)
         print('After epoch {} the average Blue score of the test set is: {}'.format(epoch, average_score))
+
+        metrics_dict = run_nlgeval(CERD, test_dataloader)
+        print('After epoch {} the metrics dict is: {}'.format(epoch, metrics_dict))
 
 
 def evaluate(encoder, decoder, input_tensor, max_length=MAX_LENGTH):
@@ -195,6 +199,54 @@ def evaluate_test_set(generator, test_dataloader, max_length=MAX_LENGTH):
     average_score = sum(scores) / len(scores)
     return average_score
 
+def run_nlgeval(generator, test_dataloader):
+
+
+    references = []
+    hypothesis = []
+
+    corpus = test_dataloader.dataset.vocabulary
+
+    encoder = generator.encoder
+    decoder = generator.decoder
+
+    for i, (input_tensor, target_tensor) in enumerate(test_dataloader):
+
+        input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
+        target_sent = corpus.tokens_to_sent(target_tensor.view(-1))
+
+        batch_size = input_tensor.shape[0]
+        input_length = input_tensor.shape[1]
+
+        encoder_outputs = torch.zeros(MAX_LENGTH, batch_size, encoder.hidden_size, device=DEVICE)
+        encoder_hidden = encoder.forward(input_tensor).transpose(0, 1)
+
+        for ei in range(input_length):
+            encoder_outputs[ei + (MAX_LENGTH - input_length), :, :] = encoder_hidden[ei, :, :]
+
+        decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).transpose(0, 1)
+        decoder_hidden = encoder_hidden[-1, :, :].unsqueeze(0)
+
+        decoded_words = []
+
+        for di in range(MAX_WORDS_GEN):
+            decoder_output, decoder_hidden, _ = decoder(decoder_input, decoder_hidden, encoder_outputs)
+            topv, topi = decoder_output.data.topk(1)
+
+            if topi.item() == EOS_INDEX:
+                decoded_words.append(EOS_INDEX)
+                break
+            else:
+                decoded_words.append(topi.item())
+
+            decoder_input = topi.detach()
+
+        references.append([target_sent])
+        hypothesis.append(corpus.list_to_sent(decoded_words))
+
+    metrics_dict = nlgeval.compute_metrics(references, hypothesis)
+    return metrics_dict
+
 
 if __name__ == '__main__':
 
@@ -210,5 +262,6 @@ if __name__ == '__main__':
         AttnDecoderRNN = AttnDecoderRNN(hidden_size=embed_dim, output_size=dd_loader.vocabulary.n_words)
         CERD = ConvEncoderRNNDecoder(ConvEncoder, AttnDecoderRNN, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False)).to(DEVICE)
 
-    trainIters(CERD, train_dataloader, test_dataloader, num_epochs=1000)
+    trainIters(CERD, train_dataloader, test_dataloader, num_epochs=3000)
+    run_nlgeval(CERD, test_dataloader)
 
