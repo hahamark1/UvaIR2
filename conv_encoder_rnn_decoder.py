@@ -14,7 +14,6 @@ from nlgeval import NLGEval
 
 
 def load_model():
-    print(MAX_UTTERENCE_LENGTH)
     return torch.load(os.path.join('saved_models', 'conv_encoder_rnn_decoder_{}.pt'.format(MAX_UTTERENCE_LENGTH)))
 
 def load_dataset():
