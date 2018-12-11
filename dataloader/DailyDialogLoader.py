@@ -92,8 +92,6 @@ class Vocabulary():
 		if load:
 			self.load_vocabulary()
 			self.loaded = True
-			print('Loaded the dictionary')
-
 
 	def add_word(self, word):
 
@@ -120,7 +118,7 @@ class Vocabulary():
 	def tokens_to_sent(self, tensor):
 		tensor_list = tensor.cpu().data.numpy().tolist()
 		sentence = [self.index2word[token] for token in tensor_list]
-		sentence = [word for word in sentence if word != self.padding_token]
+		sentence = [word for word in sentence if word not in [self.padding_token]]
 		return " ".join(sentence)
 
 	def list_to_sent(self, list):
@@ -137,8 +135,6 @@ class Vocabulary():
 		with open(os.path.join(PATH_TO_SAVE, 'word2index_index2word.p'), 'wb') as handle:
 			pickle.dump((self.word2index, self.index2word), handle)
 
-		print('Wrote the vocabulary to a pickle')
-
 	def load_vocabulary(self):
 		""" Load a saved vocabulary and word2index and index2word"""
 
@@ -153,7 +149,7 @@ class Vocabulary():
 
 class DailyDialogLoader(Dataset):
 
-	def __init__(self, path_to_data, load=False):
+	def __init__(self, path_to_data, load=False, verbose=True, reversed=False):
 		self.path_to_data = path_to_data
 
 		# Initalize a Vocabulary object
@@ -170,19 +166,22 @@ class DailyDialogLoader(Dataset):
 
 		# Init the self.dialogues
 		self.dialogues = []
+		self.reversed = reversed
 
 		# Execute the functions to load the data
 		self.read_txt(utterance_length=N_UTTERANCES_FOR_INPUT)
 		self.read_txt(utterance_length=N_UTTERANCES_FOR_INPUT+1)
 		self.read_txt(utterance_length=N_UTTERANCES_FOR_INPUT+2)
+		self.read_txt(utterance_length=N_UTTERANCES_FOR_INPUT+3)
 		self.fill_vocabulary()
 		self.convert_to_onehot()
 		self.split_inputs_targets()
 
 		self.max_words = np.max([len(x) for x in self.inputs])
 
-		print('Starting to train with {} dialogue pairs'.format(len(self.dialogues)))
-		print('The vocab size is {}'.format(self.vocabulary.n_words))
+		if verbose:
+			print('Starting to train with {} dialogue pairs'.format(len(self.dialogues)))
+			print('The vocab size is {}'.format(self.vocabulary.n_words))
 
 		if not load:
 			self.vocabulary.save_vocabulary()
@@ -225,7 +224,7 @@ class DailyDialogLoader(Dataset):
 					question = ' {} '.format(self.eou_token).join(utterances[index:index+utterance_length])
 					question = '{} {}'.format(self.sos_token, question).strip()
 
-					target = utterances[index + utterance_length + 1]
+					target = utterances[index + utterance_length]
 					target = '{} {}'.format(target, self.eos_token).strip()
 
 					dialogues.append((question, target))
@@ -247,6 +246,9 @@ class DailyDialogLoader(Dataset):
 		for question, answer in self.dialogues:
 
 			question = [self.word_to_onehot(word) for word in question.split(' ')]
+			if self.reversed:
+				question.reverse()
+
 			answer = [self.word_to_onehot(word) for word in answer.split(' ')]
 
 			self.one_hot_dialogues.append((question, answer))
@@ -269,14 +271,13 @@ class PadCollate:
 	a batch of sequences
 	"""
 
-	def __init__(self, pad_front=True):
-		self.pad_front = pad_front
+	def __init__(self):
+		pass
 
 	def pad_collate(self, batch):
 		"""
 		args:
 		    batch - list of [input, target]
-
 		return:
 		    inputs - a tensor of all inputs in batch after padding
 		    targets - a tensor of all targets in batch after padding
@@ -286,9 +287,9 @@ class PadCollate:
 		max_input_length = max([len(input_target_pair[0]) for input_target_pair in batch])
 		max_target_length = max([len(input_target_pair[1]) for input_target_pair in batch])
 
-		# Pad 'm
-		batch = [[self.pad_tensor(input_target_pair[0], max_input_length), \
-				 self.pad_tensor(input_target_pair[1], max_target_length)] \
+		# We left pad the data, and right pad the targets
+		batch = [[self.pad_tensor(input_target_pair[0], max_input_length, pad_front=True), \
+				 self.pad_tensor(input_target_pair[1], max_target_length, pad_front=False)] \
 					for input_target_pair in batch]
 
 		# Stack the inputs together and the targets together
@@ -297,12 +298,11 @@ class PadCollate:
 
 		return inputs, targets
 
-	def pad_tensor(self, vec, pad):
+	def pad_tensor(self, vec, pad, pad_front):
 		"""
 		args:
 		    vec - tensor to pad
 		    pad - the size to pad to
-
 		return:
 		    a new tensor padded to 'pad' in dimension 'dim'
 		"""
@@ -311,7 +311,8 @@ class PadCollate:
 
 		vec = vec.type(torch.LongTensor)
 
-		if self.pad_front:
+		# Left pad the data, right pad the targets
+		if pad_front:
 			return torch.cat([torch.zeros(*pad_size).type(torch.LongTensor), vec], dim=0)
 		else:
 			return torch.cat([vec, torch.zeros(*pad_size).type(torch.LongTensor)], dim=0)
@@ -335,4 +336,4 @@ if __name__ == '__main__':
 			continue
 			#print(dataloader.dataset.vocabulary.tokens_to_sent(data[j]))
 			#print(dataloader.dataset.vocabulary.tokens_to_sent(target[j]))
-			#print('')
+#print('')
