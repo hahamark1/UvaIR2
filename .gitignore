@@ -2,3 +2,10 @@
 /idea.*
 idea/
 *.pyc
+
+seqGAN/saved_models/*
+!seqGAN/saved_models/.gitkeep
+seqGAN/data/*
+seqGAN/__pychache__
+
+*.m

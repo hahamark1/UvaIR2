@@ -254,10 +254,10 @@ if __name__ == '__main__':
     attn_decoder1 = DecoderRNN(hidden_size, dd_loader.vocabulary.n_words).to(DEVICE)
 
     generator = Generator(encoder1, attn_decoder1, hidden_size, hidden_size, dd_loader.vocabulary.n_words, criterion=nn.NLLLoss(ignore_index=0, size_average=False)).to(DEVICE)
-    # generator.load_state_dict(torch.load('generator.m')['state_dict'])
+    generator.load_state_dict(torch.load('generator.m')['state_dict'])
 
     dis = discriminator.Discriminator(hidden_size, hidden_size, dd_loader.vocabulary.n_words, MAX_SEQ_LEN, gpu=CUDA)
-    # dis.load_state_dict(torch.load('discriminator.m')['state_dict'])
+    dis.load_state_dict(torch.load('discriminator.m')['state_dict'])
 
     if CUDA:
         generator = generator.cuda()
@@ -267,13 +267,13 @@ if __name__ == '__main__':
     print('Starting Generator MLE Training...')
     gen_optimizer = optim.Adam(generator.parameters(), lr=1e-3)
     gen_optimizer.load_state_dict(torch.load('generator.m')['optimizer'])
-    train_generator_MLE(generator, dataloader, gen_optimizer, MLE_TRAIN_EPOCHS)
+    # train_generator_MLE(generator, dataloader, gen_optimizer, MLE_TRAIN_EPOCHS)
 
     # PRETRAIN DISCRIMINATOR
     print('\nStarting Discriminator Training...')
     dis_optimizer = optim.Adagrad(dis.parameters())
     dis_optimizer.load_state_dict(torch.load('discriminator.m')['optimizer'])
-    train_discriminator(dataloader, dis, dis_optimizer, generator, DISC_TRAIN_EPOCHS)
+    # train_discriminator(dataloader, dis, dis_optimizer, generator, DISC_TRAIN_EPOCHS)
 
     # ADVERSARIAL TRAINING
     print('\nStarting Adversarial Training...')
