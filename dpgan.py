@@ -49,7 +49,7 @@ def pretrain_generator(input_tensor, target_tensor, generator, gen_optimizer):
     gen_loss.backward()
     gen_optimizer.step()
 
-    return gen_loss, generated_sentence
+    return gen_loss, generated_sentence.detach()
 
 
 def pretrain_discriminator(input_tensor, target_tensor, generated_sentence, discriminator, disc_optimizer):
