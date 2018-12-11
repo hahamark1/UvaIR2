@@ -288,13 +288,6 @@ def load_dataset():
 if __name__ == '__main__':
 
     dd_loader, train_dataloader, test_dataloader = load_dataset()
-    
-    # dd_loader = DailyDialogLoader(PATH_TO_DATA)
-    # dataloader = DataLoader(dd_loader, batch_size=16, shuffle=True, num_workers=0, collate_fn=PadCollate())
-
-    
-    # dd_test_loader = DailyDialogLoader(PATH_TO_TEST_DATA)
-    # test_dataloader = DataLoader(dd_test_loader, batch_size=1, shuffle=True, num_workers=0, collate_fn=PadCollate())
 
     vocab_size = dd_loader.vocabulary.n_words
     hidden_size = 256
