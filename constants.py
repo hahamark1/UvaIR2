@@ -7,8 +7,8 @@ MAX_WORDS_GEN = 20
 # Cuda constants
 DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
-MAX_UTTERENCE_LENGTH = 15
-MAX_LENGTH = 15
+MAX_UTTERENCE_LENGTH = 30
+MAX_LENGTH = 30
 
 TEACHER_FORCING_RATIO = 0.5
 
