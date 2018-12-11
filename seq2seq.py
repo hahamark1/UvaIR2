@@ -1,5 +1,7 @@
 import torch
-from models.model import AttnDecoderRNN, EncoderRNN, Generator
+from models.Generator import Generator
+from models.AttnDecoderRNN import AttnDecoderRNN
+from models.EncoderRNN import EncoderRNN
 import torch.optim as optim
 import torch.nn as nn
 from constants import *

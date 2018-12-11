@@ -287,7 +287,7 @@ class PadCollate:
 		max_input_length = max([len(input_target_pair[0]) for input_target_pair in batch])
 		max_target_length = max([len(input_target_pair[1]) for input_target_pair in batch])
 
-		# We left pad the data, and right pad the targets
+		# Pad 'm
 		batch = [[self.pad_tensor(input_target_pair[0], max_input_length, pad_front=True), \
 				 self.pad_tensor(input_target_pair[1], max_target_length, pad_front=False)] \
 					for input_target_pair in batch]
@@ -311,7 +311,6 @@ class PadCollate:
 
 		vec = vec.type(torch.LongTensor)
 
-		# Left pad the data, right pad the targets
 		if pad_front:
 			return torch.cat([torch.zeros(*pad_size).type(torch.LongTensor), vec], dim=0)
 		else:

@@ -6,7 +6,7 @@ Created on Wed Nov  7 13:56:42 2018
 """
 
 import torch
-from models.model import AttnDecoderRNN, EncoderRNN, DecoderRNN, Generator
+from models.Generator import AttnDecoderRNN, EncoderRNN, DecoderRNN, Generator
 import random
 import time
 from utils.seq2seq_helper_funcs import showPlot, asMinutes, timeSince

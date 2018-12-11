@@ -7,7 +7,7 @@ Created on Dec 1 2018
 
 import torch
 import numpy as np
-from models.model import AttnDecoderRNN, EncoderRNN, DecoderRNN, Generator
+from models.Generator import AttnDecoderRNN, EncoderRNN, DecoderRNN, Generator
 from models.Discriminator import Discriminator
 from evaluation.BlueEvaluator import BlueEvaluator
 import random
