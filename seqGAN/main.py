@@ -5,7 +5,7 @@ import sys
 import discriminator
 import helpers
 from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
-from models.model import *
+from models.Generator import *
 from torch.utils.data import DataLoader
 from constants import *
 

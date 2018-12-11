@@ -2,3 +2,13 @@
 /idea.*
 idea/
 *.pyc
+*.pt
+*.png
+*.jpg
+*.jpeg
+/nlg-geval
+nlg-geval/
+/nlg-geval/*
+/__pycache__/
+__pycache__/*
+*/__pycache__
