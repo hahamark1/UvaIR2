@@ -9,3 +9,6 @@ seqGAN/data/*
 seqGAN/__pychache__
 
 *.m
+
+nlg-eval/
+models/wikitext-2*
