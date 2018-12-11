@@ -11,6 +11,7 @@ from models.AttnDecoderRNN import AttnDecoderRNN
 from models.EncoderRNN import EncoderRNN
 from models.DecoderRNN import DecoderRNN
 from models.convolutional_encoder import FConvEncoder
+from models.convolutional_generator import ConvEncoderRNNDecoder
 from models.Generator import Generator
 from models.Discriminator import Discriminator
 from evaluation.BlueEvaluator import BlueEvaluator
@@ -77,7 +78,7 @@ def train(input_tensor, target_tensor, generator, discriminator, adverserial_los
     gen_loss, generated_sentence = generator(input_tensor, target_tensor)
 
     # Compute discriminator loss and output (0-1) for both the true and the generated sample
-    generated_disc_loss, disc_generated = discriminator(input_tensor, generated_sentence, true_sample=False)
+    generated_disc_loss, disc_generated = discriminator(input_tensor, generated_sentence.detach(), true_sample=False)
     true_disc_loss, disc_true = discriminator(input_tensor, target_tensor, true_sample=True)
 
     # Compute the total discriminator loss
@@ -288,20 +289,35 @@ def load_dataset():
 
 if __name__ == '__main__':
 
+    convolutional = False
+
     dd_loader, train_dataloader, test_dataloader = load_dataset()
 
     vocab_size = dd_loader.vocabulary.n_words
     hidden_size = 256
 
-    # Initialize the generator
-    gen_encoder = EncoderRNN(vocab_size, hidden_size).to(DEVICE)
-    gen_decoder = AttnDecoderRNN(hidden_size, vocab_size).to(DEVICE)
-    generator = Generator(gen_encoder, gen_decoder, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False))
 
-    # Initialize the discriminator
-    disc_encoder = EncoderRNN(vocab_size, hidden_size).to(DEVICE)
-    disc_decoder = DecoderRNN(hidden_size, vocab_size).to(DEVICE)
-    discriminator = Discriminator(disc_encoder, disc_decoder, hidden_size, vocab_size).to(DEVICE)
+    if convolutional:
+        ConvEncoder = FConvEncoder(dd_loader.vocabulary.n_words, embed_dim=embed_dim)
+        AttnDecoderRNN = AttnDecoderRNN(hidden_size=embed_dim, output_size=dd_loader.vocabulary.n_words)
+        generator = ConvEncoderRNNDecoder(ConvEncoder, AttnDecoderRNN,
+                                     criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False)).to(DEVICE)
+
+        
+
+
+    else:
+        # Initialize the generator
+        gen_encoder = EncoderRNN(vocab_size, hidden_size).to(DEVICE)
+        gen_decoder = AttnDecoderRNN(hidden_size, vocab_size).to(DEVICE)
+        generator = Generator(gen_encoder, gen_decoder, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False))
+
+        # Initialize the discriminator
+        disc_encoder = EncoderRNN(vocab_size, hidden_size).to(DEVICE)
+        disc_decoder = DecoderRNN(hidden_size, vocab_size).to(DEVICE)
+        discriminator = Discriminator(disc_encoder, disc_decoder, hidden_size, vocab_size).to(DEVICE)
+
+
 
     # Number of epochs to pretrain the generator and discriminator, before performing adversarial training
     pre_train_epochs = 5
