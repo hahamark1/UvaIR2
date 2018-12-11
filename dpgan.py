@@ -7,7 +7,10 @@ Created on Dec 1 2018
 
 import torch
 import numpy as np
-from models.Generator import AttnDecoderRNN, EncoderRNN, DecoderRNN, Generator
+from models.AttnDecoderRNN import AttnDecoderRNN
+from models.EncoderRNN import EncoderRNN
+from models.DecoderRNN import DecoderRNN
+from models.Generator import Generator
 from models.Discriminator import Discriminator
 from evaluation.BlueEvaluator import BlueEvaluator
 import random
@@ -152,7 +155,7 @@ def run_training(generator, discriminator, dataloader, pre_train_epochs):
             if iteration % EVALUATE_EVERY == 0 and iteration > 0:
                 # Take the first item of the batch to evaluate
                 test_sentence, test_target_sentence = input_tensor[0, :], target_tensor[0, :]
-                evaluate(generator, discriminator, test_sentence, test_target_sentence)
+                evaluate(generator, discriminator, test_sentence, test_target_sentence, dataloader)
 
             # if iteration % SAVE_EVERY == 0 and iteration > 0:
 
@@ -172,7 +175,7 @@ def run_training(generator, discriminator, dataloader, pre_train_epochs):
 
 
 
-def evaluate(generator, discriminator, context_tensor, target_sentence):
+def evaluate(generator, discriminator, context_tensor, target_sentence, dataloader):
 
     with torch.no_grad():
         context_tensor = context_tensor.view(1, -1)
@@ -269,16 +272,15 @@ def evaluate_test_set(generator, train_dataloader, test_dataloader, max_length=M
 def load_dataset():
     """ Load the training and test sets """
 
-
-    train_dd_loader = DailyDialogLoader(PATH_TO_TRAIN_DATA)
+    train_dd_loader = DailyDialogLoader(PATH_TO_TRAIN_DATA, load=False)
     train_dataloader = DataLoader(train_dd_loader, batch_size=16, shuffle=True, num_workers=0,
                             collate_fn=PadCollate())
 
-    test_dd_loader = DailyDialogLoader(PATH_TO_TEST_DATA, word2index=train_dd_loader.vocabulary.word2index, word2count=train_dd_loader.vocabulary.word2count, index2word=train_dd_loader.vocabulary.index2word)
+    test_dd_loader = DailyDialogLoader(PATH_TO_TEST_DATA, load=True)
     test_dataloader = DataLoader(test_dd_loader, batch_size=1, shuffle=False, num_workers=0,
                             collate_fn=PadCollate())
 
-    # assert train_dd_loader.vocabulary.n_words == test_dd_loader.vocabulary.n_words
+    assert train_dd_loader.vocabulary.n_words == test_dd_loader.vocabulary.n_words
 
     return train_dd_loader, train_dataloader, test_dataloader
 
@@ -308,13 +310,13 @@ if __name__ == '__main__':
     discriminator = Discriminator(disc_encoder, disc_decoder, hidden_size, vocab_size).to(DEVICE)
 
     # Number of epochs to pretrain the generator and discriminator, before performing adversarial training
-    # pre_train_epochs = 10
-    # run_training(generator, discriminator, dataloader, pre_train_epochs)
+    pre_train_epochs = 5
+    run_training(generator, discriminator, train_dataloader, pre_train_epochs)
 
-    saved_gen = torch.load('saved_models/dp_gan_generator.pt')
-    saved_disc = torch.load('saved_models/dp_gan_discriminator.pt')
-    generator.load_state_dict(saved_gen['state_dict'])
+    # saved_gen = torch.load('saved_models/dp_gan_generator.pt')
+    # saved_disc = torch.load('saved_models/dp_gan_discriminator.pt')
+    # generator.load_state_dict(saved_gen['state_dict'])
     # discriminator.load_state_dict(saved_disc['state_dict'])
 
-    avg_score = evaluate_test_set(generator, train_dataloader, test_dataloader, max_length=MAX_LENGTH)
-    print('avg blue score:', avg_score)
+    # avg_score = evaluate_test_set(generator, train_dataloader, test_dataloader, max_length=MAX_LENGTH)
+    # print('avg blue score:', avg_score)
