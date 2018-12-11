@@ -2,7 +2,7 @@ import torch
 from models.convolutional_encoder import FConvEncoder
 import torch.optim as optim
 import torch.nn as nn
-from models.model import AttnDecoderRNN
+from models.AttnDecoderRNN import AttnDecoderRNN
 from models.convolutional_generator import ConvEncoderRNNDecoder
 from constants import *
 from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
@@ -262,6 +262,6 @@ if __name__ == '__main__':
         AttnDecoderRNN = AttnDecoderRNN(hidden_size=embed_dim, output_size=dd_loader.vocabulary.n_words)
         CERD = ConvEncoderRNNDecoder(ConvEncoder, AttnDecoderRNN, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False)).to(DEVICE)
 
-    trainIters(CERD, train_dataloader, test_dataloader, num_epochs=3000)
+    trainIters(CERD, train_dataloader, test_dataloader, num_epochs=3000, save_every=10000000)
     run_nlgeval(CERD, test_dataloader)
 

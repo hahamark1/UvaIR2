@@ -1,5 +1,4 @@
 import torch.nn as nn
-from models.conv_tbc import ConvTBC
 from models.grad_multiply import GradMultiply
 import math
 import torch
@@ -51,12 +50,6 @@ class FConvEncoder(nn.Module):
                 padding = kernel_size // 2
             else:
                 padding = 0
-
-
-            # self.convolutions.append(
-            #     ConvTBC_(in_channels, out_channels * 2, kernel_size,
-            #             dropout=dropout, padding=padding)
-            # )
 
             self.convolutions.append(
                 nn.Conv1d(in_channels, out_channels * 2, kernel_size, padding=padding)
@@ -133,16 +126,6 @@ class FConvEncoder(nn.Module):
         y = (x + input_embedding) * math.sqrt(0.5)
 
         return y
-
-
-def ConvTBC_(in_channels, out_channels, kernel_size, dropout=0, **kwargs):
-    """Weight-normalized Conv1d layer"""
-
-    m = ConvTBC(in_channels, out_channels, kernel_size, **kwargs)
-    std = math.sqrt((4 * (1.0 - dropout)) / (m.kernel_size[0] * in_channels))
-    m.weight.data.normal_(mean=0, std=std)
-    m.bias.data.zero_()
-    return m
 
 def extend_conv_spec(convolutions):
     """
