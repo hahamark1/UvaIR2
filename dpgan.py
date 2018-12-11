@@ -289,7 +289,7 @@ def load_dataset():
 
 if __name__ == '__main__':
 
-    convolutional = False
+    convolutional = True
 
     dd_loader, train_dataloader, test_dataloader = load_dataset()
 
@@ -298,13 +298,15 @@ if __name__ == '__main__':
 
 
     if convolutional:
-        ConvEncoder = FConvEncoder(dd_loader.vocabulary.n_words, embed_dim=embed_dim)
-        AttnDecoderRNN = AttnDecoderRNN(hidden_size=embed_dim, output_size=dd_loader.vocabulary.n_words)
+        ConvEncoder = FConvEncoder(dd_loader.vocabulary.n_words, embed_dim=hidden_size)
+        AttnDecoderRNN = AttnDecoderRNN(hidden_size=hidden_size, output_size=dd_loader.vocabulary.n_words)
         generator = ConvEncoderRNNDecoder(ConvEncoder, AttnDecoderRNN,
                                      criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False)).to(DEVICE)
 
-        
-
+        # Initialize the discriminator
+        disc_encoder = FConvEncoder(vocab_size, hidden_size).to(DEVICE)
+        disc_decoder = DecoderRNN(hidden_size, vocab_size).to(DEVICE)
+        discriminator = Discriminator(disc_encoder, disc_decoder, hidden_size, vocab_size).to(DEVICE)
 
     else:
         # Initialize the generator
