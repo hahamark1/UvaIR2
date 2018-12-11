@@ -2,10 +2,10 @@ from __future__ import print_function
 from math import ceil
 import sys
 
-import discriminator
+from models.discriminator import *
 import helpers
 from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
-from models.model import *
+from models.generator import *
 from torch.utils.data import DataLoader
 from constants import *
 
