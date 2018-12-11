@@ -114,10 +114,8 @@ class Generator(nn.Module):
             decoder_output, decoder_hidden, decoder_attention = self.decoder(
                 decoder_input, decoder_hidden, encoder_outputs)
             topv, topi = decoder_output.topk(1)
-            # decoder_input = topi.squeeze().detach()  # detach from history as input
             sampled_word = torch.multinomial(torch.exp(decoder_output), 1)
             decoder_input = sampled_word.detach()
-            # torch.multinomial(torch.exp(decoder_output), 1)
             decoder_outputs.append(sampled_word)
 
         decoder_outputs = torch.stack(decoder_outputs)
@@ -133,9 +131,12 @@ class Generator(nn.Module):
         Embeds input and applies GRU one token at a time (seq_len = 1)
         """
         # input dim                                             # batch_size
-        emb = self.embeddings(inp)                              # batch_size x embedding_dim
-        emb = emb.view(1, -1, self.embedding_dim)               # 1 x batch_size x embedding_dim
-        out, hidden = self.gru(emb, hidden)                     # 1 x batch_size x hidden_dim (out)
+        # emb = self.embeddings(inp)                              # batch_size x embedding_dim
+        # emb = emb.view(1, -1, self.embedding_dim)               # 1 x batch_size x embedding_dim
+        # print(self.encoder)
+        # print(emb)
+        # print(hidden)
+        out, hidden = self.encoder(inp, hidden)                     # 1 x batch_size x hidden_dim (out)
         out = self.gru2out(out.view(-1, self.hidden_dim))       # batch_size x vocab_size
         out = F.log_softmax(out, dim=1)
         return out, hidden
@@ -155,7 +156,7 @@ class Generator(nn.Module):
         batch_size, seq_len = inp.size()
         inp = inp.permute(1, 0)           # seq_len x batch_size
         target = target.permute(1, 0)     # seq_len x batch_size
-        h = self.init_hidden(batch_size)
+        h = self.init_hidden(batch_size).to(DEVICE)
 
         loss = 0
         for i in range(seq_len):
@@ -180,14 +181,12 @@ class Generator(nn.Module):
 
         inp = inp.transpose(0,1).squeeze(-1)
         batch_size, seq_len = inp.size()
-        # inp = inp.permute(1, 0)          # seq_len x batch_size
         target = target.permute(1, 0)    # seq_len x batch_size
-        h = self.initHidden(batch_size=batch_size)
+        h = self.initHidden(batch_size=batch_size).to(DEVICE)
 
         loss = 0
         for i in range(seq_len):
             out, h = self.PG_forward(inp[:, i], h)
-            # TODO: should h be detached from graph (.detach())?
 
             for j in range(batch_size):
                 loss += -out[j][target.data[i][j]]*reward[j]     # log(P(y_t|Y_1:Y_{t-1})) * Q
@@ -279,7 +278,7 @@ class AttnDecoderRNN(nn.Module):
 
         output, hidden = self.gru(output, hidden)
 
-        output = self.log_softmax(self.out(output))
+        output = self.out(output)
         output = output.squeeze(0)
 
         return output, hidden, attn_weights

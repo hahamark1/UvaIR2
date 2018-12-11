@@ -4,13 +4,12 @@ import numpy as np
 import unicodedata
 import string
 import re
-
+from collections import defaultdict
+import os
+import pickle
 import sys
 sys.path.append("..")
 from constants import *
-
-
-N_UTTERANCES_FOR_INPUT = 3
 
 
 def unicodeToAscii(s):
@@ -57,6 +56,7 @@ def normalizeString(s):
 
 	# We do not want to take the last __eou__ into account
 	s = ' '.join(s.split()[:-1])
+	s = re.sub('__eou__ __eou__', '__eou__', s)
 	return s.lower()
 
 def filterPair(p):
@@ -68,7 +68,7 @@ def filterPairs(pairs):
 
 class Vocabulary():
 
-	def __init__(self):
+	def __init__(self, load):
 
 		self.padding_token = PADDING_TOKEN
 		self.split_token = SPLIT_TOKEN
@@ -83,7 +83,21 @@ class Vocabulary():
 		self.index2word = {self.word2index[key]: key for key in self.word2index.keys()}
 		self.n_words = 7
 
+		self.word2index = defaultdict(lambda: UNK_INDEX, self.word2index)
+		self.index2word = defaultdict(lambda: UNK_TOKEN, self.index2word)
+		self.word2count = defaultdict(lambda: 0, self.word2count)
+
+		self.loaded = False
+
+		if load:
+			self.load_vocabulary()
+			self.loaded = True
+
 	def add_word(self, word):
+
+		if self.loaded:
+			return
+
 		if word not in self.word2index:
 			self.word2index[word] = self.n_words
 			self.word2count[word] = 1
@@ -93,6 +107,10 @@ class Vocabulary():
 			self.word2count[word] += 1
 
 	def add_utterance(self, utterance):
+
+		if self.loaded:
+			return
+
 		utterance = utterance.split(' ')
 		for word in utterance:
 			self.add_word(word)
@@ -102,7 +120,7 @@ class Vocabulary():
 		if isinstance(tensor_list[0], list):
 			tensor_list = [x[0] for x in tensor_list]
 		sentence = [self.index2word[token] for token in tensor_list]
-		sentence = [word for word in sentence if word != self.padding_token]
+		sentence = [word for word in sentence if word not in [self.padding_token]]
 		return " ".join(sentence)
 
 	def list_to_sent(self, list):
@@ -110,13 +128,34 @@ class Vocabulary():
 		sentence = [word for word in sentence if word != self.padding_token]
 		return " ".join(sentence)
 
+	def save_vocabulary(self):
+		""" Save the vocabulary and word2index and index2word """
+
+		self.word2index = dict(self.word2index)
+		self.index2word = dict(self.index2word)
+
+		with open(os.path.join(PATH_TO_SAVE, 'word2index_index2word.p'), 'wb') as handle:
+			pickle.dump((self.word2index, self.index2word), handle)
+
+	def load_vocabulary(self):
+		""" Load a saved vocabulary and word2index and index2word"""
+
+		with open(os.path.join(PATH_TO_SAVE, 'word2index_index2word.p'), 'rb') as handle:
+			self.word2index, self.index2word = pickle.load(handle)
+
+		self.word2index = defaultdict(lambda: UNK_INDEX, self.word2index)
+		self.index2word = defaultdict(lambda: UNK_TOKEN, self.index2word)
+		self.n_words = len(self.index2word.keys())
+
+		assert len(self.word2index) == len(self.index2word)
+
 class DailyDialogLoader(Dataset):
 
-	def __init__(self, path_to_data):
+	def __init__(self, path_to_data, load=False, verbose=False):
 		self.path_to_data = path_to_data
 
 		# Initalize a Vocabulary object
-		self.vocabulary = Vocabulary()
+		self.vocabulary = Vocabulary(load=load)
 
 		# Initialize the lists in which to store the good stuff
 		self.dialogues = []
@@ -127,16 +166,26 @@ class DailyDialogLoader(Dataset):
 		self.sos_token = SOS_TOKEN
 		self.eos_token = EOS_TOKEN
 
+		# Init the self.dialogues
+		self.dialogues = []
+
 		# Execute the functions to load the data
-		self.read_txt()
+		self.read_txt(utterance_length=N_UTTERANCES_FOR_INPUT)
+		self.read_txt(utterance_length=N_UTTERANCES_FOR_INPUT+1)
+		self.read_txt(utterance_length=N_UTTERANCES_FOR_INPUT+2)
+		self.read_txt(utterance_length=N_UTTERANCES_FOR_INPUT+3)
 		self.fill_vocabulary()
 		self.convert_to_onehot()
 		self.split_inputs_targets()
 
 		self.max_words = np.max([len(x) for x in self.inputs])
 
-		print('Starting to train with {} dialogue pairs'.format(len(self.dialogues)))
-		print('The vocab size is {}'.format(self.vocabulary.n_words))
+		if verbose:
+			print('Starting to train with {} dialogue pairs'.format(len(self.dialogues)))
+			print('The vocab size is {}'.format(self.vocabulary.n_words))
+
+		if not load:
+			self.vocabulary.save_vocabulary()
 
 	def __len__(self):
 		# Needed for the PyTorch DataLoader, returns the length of the dataset
@@ -146,7 +195,7 @@ class DailyDialogLoader(Dataset):
 		# Needed for the PyTorch DataLoader, returns an [input, target] pair given an index
 		return self.inputs[idx], self.targets[idx]
 
-	def read_txt(self):
+	def read_txt(self, utterance_length=N_UTTERANCES_FOR_INPUT):
 		# Reads a txt file, returns a list of dialogues, consisting of lists of utterances, consisting of words
 		# Example
 		# 		-the whole thing consists of two dialogues
@@ -168,22 +217,22 @@ class DailyDialogLoader(Dataset):
 
 				utterances = words.split(' {} '.format(self.eou_token))
 
-				if len(utterances) < self.n_utterances_for_input+1:
+				if len(utterances) < utterance_length+1:
 					continue
 
-				for index in range(0, len(utterances)-self.n_utterances_for_input - 1):
+				for index in range(0, len(utterances)-utterance_length - 1):
 
-					question = ' {} '.format(self.eou_token).join(utterances[index:index+self.n_utterances_for_input])
+					question = ' {} '.format(self.eou_token).join(utterances[index:index+utterance_length])
 					question = '{} {}'.format(self.sos_token, question).strip()
 
-					target = utterances[index + self.n_utterances_for_input + 1]
+					target = utterances[index + utterance_length]
 					target = '{} {}'.format(target, self.eos_token).strip()
 
 					dialogues.append((question, target))
 
 		dialogues = filterPairs(dialogues)
 
-		self.dialogues = dialogues
+		self.dialogues += dialogues
 
 	def fill_vocabulary(self):
 		# Fill the vocabulary of the Vocabulary class
@@ -220,14 +269,13 @@ class PadCollate:
 	a batch of sequences
 	"""
 
-	def __init__(self, pad_front=True):
-		self.pad_front = pad_front
+	def __init__(self):
+		pass
 
 	def pad_collate(self, batch):
 		"""
 		args:
 		    batch - list of [input, target]
-
 		return:
 		    inputs - a tensor of all inputs in batch after padding
 		    targets - a tensor of all targets in batch after padding
@@ -237,9 +285,9 @@ class PadCollate:
 		max_input_length = max([len(input_target_pair[0]) for input_target_pair in batch])
 		max_target_length = max([len(input_target_pair[1]) for input_target_pair in batch])
 
-		# Pad 'm
-		batch = [[self.pad_tensor(input_target_pair[0], max_input_length), \
-				 self.pad_tensor(input_target_pair[1], max_target_length)] \
+		# We left pad the data, and right pad the targets
+		batch = [[self.pad_tensor(input_target_pair[0], max_input_length, pad_front=True), \
+				 self.pad_tensor(input_target_pair[1], max_target_length, pad_front=False)] \
 					for input_target_pair in batch]
 
 		# Stack the inputs together and the targets together
@@ -248,12 +296,11 @@ class PadCollate:
 
 		return inputs, targets
 
-	def pad_tensor(self, vec, pad):
+	def pad_tensor(self, vec, pad, pad_front):
 		"""
 		args:
 		    vec - tensor to pad
 		    pad - the size to pad to
-
 		return:
 		    a new tensor padded to 'pad' in dimension 'dim'
 		"""
@@ -262,7 +309,8 @@ class PadCollate:
 
 		vec = vec.type(torch.LongTensor)
 
-		if self.pad_front:
+		# Left pad the data, right pad the targets
+		if pad_front:
 			return torch.cat([torch.zeros(*pad_size).type(torch.LongTensor), vec], dim=0)
 		else:
 			return torch.cat([vec, torch.zeros(*pad_size).type(torch.LongTensor)], dim=0)
@@ -276,13 +324,12 @@ if __name__ == '__main__':
 
 	from torch.utils.data import Dataset, DataLoader
 
-	DDL = DailyDialogLoader('datasets/dialogues_train.txt')
-	dataloader = DataLoader(DDL, batch_size=2, shuffle=True, num_workers=0, collate_fn=PadCollate(pad_front=True))
+	PATH_TO_SAVE = os.path.join('..', 'saved_models')
+	DDL = DailyDialogLoader('../data/dailydialog/train/dialogues_train.txt')
+	dataloader = DataLoader(DDL, batch_size=16, shuffle=True, num_workers=0, collate_fn=PadCollate(pad_front=True))
 
 	for i, (data, target) in enumerate(dataloader):
 
 		for j in range(0, target.shape[0]):
 			continue
-			#print(dataloader.dataset.vocabulary.tokens_to_sent(data[j]))
-			#print(dataloader.dataset.vocabulary.tokens_to_sent(target[j]))
-			#print('')
+			

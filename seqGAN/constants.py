@@ -1,4 +1,5 @@
 import torch
+import os
 
 MAX_WORDS_encoder = 150
 MAX_WORDS_GEN = 20
@@ -6,10 +7,17 @@ MAX_WORDS_GEN = 20
 # Cuda constants
 DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
-MAX_UTTERENCE_LENGTH = 40
-MAX_LENGTH = 40
+MAX_UTTERENCE_LENGTH = 30
+MAX_LENGTH = 30
 
 TEACHER_FORCING_RATIO = 0.5
+
+N_UTTERANCES_FOR_INPUT = 3
+
+PATH_TO_SAVE = os.path.join('saved_models')
+PATH_TO_TRAIN_DATA = 'data/dailydialog/train/dialogues_train.txt'
+PATH_TO_TEST_DATA = 'data/dailydialog/test/dialogues_test.txt'
+# PATH_TO_TEST_DATA = 'data/dailydialog/train/train.txt'
 
 # Vocabulary preprocessing tokens
 PADDING_TOKEN = '__PADDING__'

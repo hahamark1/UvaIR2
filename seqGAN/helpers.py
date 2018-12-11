@@ -32,11 +32,6 @@ def prepare_generator_batch(samples, start_letter=0, gpu=False):
 
     return inp, target
 
-# def get_discriminator_samples(input_tensor, target_tensor, gen_tensor):
-    #
-    # pos_inp = torch.cat((input_tensor, target_tensor), 1)
-    # print(pos_inp.shape)
-
 def prepare_discriminator_data(pos_samples, neg_samples, gpu=False):
     """
     Takes positive (target) samples, negative (generator) samples and prepares inp and target data for discriminator.
@@ -103,8 +98,6 @@ def get_discriminator_inp_target(input_tensor, target_tensor, gen_tensor):
 
     return inp, target
 
-
-
 def batchwise_sample(gen, num_samples, batch_size):
     """
     Sample num_samples samples batch_size samples at a time from gen.
@@ -134,4 +127,3 @@ def sample_true(dataloader, num_samples):
 
     random_sample = torch.utils.data.random_split(dataloader.dataset, lengths)[0]
     return random_sample
-
