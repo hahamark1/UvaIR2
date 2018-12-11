@@ -10,6 +10,7 @@ import numpy as np
 from models.AttnDecoderRNN import AttnDecoderRNN
 from models.EncoderRNN import EncoderRNN
 from models.DecoderRNN import DecoderRNN
+from models.convolutional_encoder import FConvEncoder
 from models.Generator import Generator
 from models.Discriminator import Discriminator
 from evaluation.BlueEvaluator import BlueEvaluator
