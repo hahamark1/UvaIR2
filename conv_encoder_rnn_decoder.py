@@ -11,9 +11,10 @@ import os
 from utils.seq2seq_helper_funcs import plot_blue_score, plot_epoch_loss
 from evaluation.BlueEvaluator import BlueEvaluator
 from nlgeval import NLGEval
-nlgeval = NLGEval()
+
 
 def load_model():
+    print(MAX_UTTERENCE_LENGTH)
     return torch.load(os.path.join('saved_models', 'conv_encoder_rnn_decoder_{}.pt'.format(MAX_UTTERENCE_LENGTH)))
 
 def load_dataset():
@@ -45,7 +46,7 @@ def train(input_tensor, target_tensor, generator, optimizer):
     return loss.item() / target_length
 
 
-def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, print_every=1000,
+def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, print_every=100,
                evaluate_every=1000, save_every=1000, learning_rate=0.25):
 
     optimizer = optim.SGD(generator.parameters(), lr=learning_rate, momentum=0.99, nesterov=True)
@@ -201,7 +202,7 @@ def evaluate_test_set(generator, test_dataloader, max_length=MAX_LENGTH):
 
 def run_nlgeval(generator, test_dataloader):
 
-
+    nlgeval = NLGEval()
     references = []
     hypothesis = []
 
@@ -245,6 +246,9 @@ def run_nlgeval(generator, test_dataloader):
         hypothesis.append(corpus.list_to_sent(decoded_words))
 
     metrics_dict = nlgeval.compute_metrics(references, hypothesis)
+
+    # Delete to save memory
+    del nlgeval
     return metrics_dict
 
 
@@ -262,6 +266,6 @@ if __name__ == '__main__':
         AttnDecoderRNN = AttnDecoderRNN(hidden_size=embed_dim, output_size=dd_loader.vocabulary.n_words)
         CERD = ConvEncoderRNNDecoder(ConvEncoder, AttnDecoderRNN, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False)).to(DEVICE)
 
-    trainIters(CERD, train_dataloader, test_dataloader, num_epochs=3000, save_every=10000000)
+    trainIters(CERD, train_dataloader, test_dataloader, num_epochs=3000, save_every=500)
     run_nlgeval(CERD, test_dataloader)
 
