@@ -12,3 +12,5 @@ seqGAN/__pychache__
 
 nlg-eval/
 models/wikitext-2*
+
+*.pt
