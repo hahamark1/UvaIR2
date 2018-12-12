@@ -7,7 +7,12 @@ Created on Dec 1 2018
 
 import torch
 import numpy as np
-from models.Generator import AttnDecoderRNN, EncoderRNN, DecoderRNN, Generator
+from models.AttnDecoderRNN import AttnDecoderRNN
+from models.EncoderRNN import EncoderRNN
+from models.DecoderRNN import DecoderRNN
+from models.convolutional_encoder import FConvEncoder
+from models.convolutional_generator import ConvEncoderRNNDecoder
+from models.Generator import Generator
 from models.Discriminator import Discriminator
 from evaluation.BlueEvaluator import BlueEvaluator
 import random
@@ -44,7 +49,7 @@ def pretrain_generator(input_tensor, target_tensor, generator, gen_optimizer):
     gen_loss.backward()
     gen_optimizer.step()
 
-    return gen_loss, generated_sentence
+    return gen_loss, generated_sentence.detach()
 
 
 def pretrain_discriminator(input_tensor, target_tensor, generated_sentence, discriminator, disc_optimizer):
@@ -73,7 +78,7 @@ def train(input_tensor, target_tensor, generator, discriminator, adverserial_los
     gen_loss, generated_sentence = generator(input_tensor, target_tensor)
 
     # Compute discriminator loss and output (0-1) for both the true and the generated sample
-    generated_disc_loss, disc_generated = discriminator(input_tensor, generated_sentence, true_sample=False)
+    generated_disc_loss, disc_generated = discriminator(input_tensor, generated_sentence.detach(), true_sample=False)
     true_disc_loss, disc_true = discriminator(input_tensor, target_tensor, true_sample=True)
 
     # Compute the total discriminator loss
@@ -152,7 +157,7 @@ def run_training(generator, discriminator, dataloader, pre_train_epochs):
             if iteration % EVALUATE_EVERY == 0 and iteration > 0:
                 # Take the first item of the batch to evaluate
                 test_sentence, test_target_sentence = input_tensor[0, :], target_tensor[0, :]
-                evaluate(generator, discriminator, test_sentence, test_target_sentence)
+                evaluate(generator, discriminator, test_sentence, test_target_sentence, dataloader)
 
             # if iteration % SAVE_EVERY == 0 and iteration > 0:
 
@@ -172,7 +177,7 @@ def run_training(generator, discriminator, dataloader, pre_train_epochs):
 
 
 
-def evaluate(generator, discriminator, context_tensor, target_sentence):
+def evaluate(generator, discriminator, context_tensor, target_sentence, dataloader):
 
     with torch.no_grad():
         context_tensor = context_tensor.view(1, -1)
@@ -269,52 +274,61 @@ def evaluate_test_set(generator, train_dataloader, test_dataloader, max_length=M
 def load_dataset():
     """ Load the training and test sets """
 
-
-    train_dd_loader = DailyDialogLoader(PATH_TO_TRAIN_DATA)
+    train_dd_loader = DailyDialogLoader(PATH_TO_TRAIN_DATA, load=False)
     train_dataloader = DataLoader(train_dd_loader, batch_size=16, shuffle=True, num_workers=0,
                             collate_fn=PadCollate())
 
-    test_dd_loader = DailyDialogLoader(PATH_TO_TEST_DATA, word2index=train_dd_loader.vocabulary.word2index, word2count=train_dd_loader.vocabulary.word2count, index2word=train_dd_loader.vocabulary.index2word)
+    test_dd_loader = DailyDialogLoader(PATH_TO_TEST_DATA, load=True)
     test_dataloader = DataLoader(test_dd_loader, batch_size=1, shuffle=False, num_workers=0,
                             collate_fn=PadCollate())
 
-    # assert train_dd_loader.vocabulary.n_words == test_dd_loader.vocabulary.n_words
+    assert train_dd_loader.vocabulary.n_words == test_dd_loader.vocabulary.n_words
 
     return train_dd_loader, train_dataloader, test_dataloader
 
 
 if __name__ == '__main__':
 
-    dd_loader, train_dataloader, test_dataloader = load_dataset()
-    
-    # dd_loader = DailyDialogLoader(PATH_TO_DATA)
-    # dataloader = DataLoader(dd_loader, batch_size=16, shuffle=True, num_workers=0, collate_fn=PadCollate())
+    convolutional = True
 
-    
-    # dd_test_loader = DailyDialogLoader(PATH_TO_TEST_DATA)
-    # test_dataloader = DataLoader(dd_test_loader, batch_size=1, shuffle=True, num_workers=0, collate_fn=PadCollate())
+    dd_loader, train_dataloader, test_dataloader = load_dataset()
 
     vocab_size = dd_loader.vocabulary.n_words
     hidden_size = 256
 
-    # Initialize the generator
-    gen_encoder = EncoderRNN(vocab_size, hidden_size).to(DEVICE)
-    gen_decoder = AttnDecoderRNN(hidden_size, vocab_size).to(DEVICE)
-    generator = Generator(gen_encoder, gen_decoder, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False))
 
-    # Initialize the discriminator
-    disc_encoder = EncoderRNN(vocab_size, hidden_size).to(DEVICE)
-    disc_decoder = DecoderRNN(hidden_size, vocab_size).to(DEVICE)
-    discriminator = Discriminator(disc_encoder, disc_decoder, hidden_size, vocab_size).to(DEVICE)
+    if convolutional:
+        ConvEncoder = FConvEncoder(dd_loader.vocabulary.n_words, embed_dim=hidden_size)
+        AttnDecoderRNN = AttnDecoderRNN(hidden_size=hidden_size, output_size=dd_loader.vocabulary.n_words)
+        generator = ConvEncoderRNNDecoder(ConvEncoder, AttnDecoderRNN,
+                                     criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False)).to(DEVICE)
+
+        # Initialize the discriminator
+        disc_encoder = FConvEncoder(vocab_size, hidden_size).to(DEVICE)
+        disc_decoder = DecoderRNN(hidden_size, vocab_size).to(DEVICE)
+        discriminator = Discriminator(disc_encoder, disc_decoder, hidden_size, vocab_size).to(DEVICE)
+
+    else:
+        # Initialize the generator
+        gen_encoder = EncoderRNN(vocab_size, hidden_size).to(DEVICE)
+        gen_decoder = AttnDecoderRNN(hidden_size, vocab_size).to(DEVICE)
+        generator = Generator(gen_encoder, gen_decoder, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False))
+
+        # Initialize the discriminator
+        disc_encoder = EncoderRNN(vocab_size, hidden_size).to(DEVICE)
+        disc_decoder = DecoderRNN(hidden_size, vocab_size).to(DEVICE)
+        discriminator = Discriminator(disc_encoder, disc_decoder, hidden_size, vocab_size).to(DEVICE)
+
+
 
     # Number of epochs to pretrain the generator and discriminator, before performing adversarial training
-    # pre_train_epochs = 10
-    # run_training(generator, discriminator, dataloader, pre_train_epochs)
+    pre_train_epochs = 5
+    run_training(generator, discriminator, train_dataloader, pre_train_epochs)
 
-    saved_gen = torch.load('saved_models/dp_gan_generator.pt')
-    saved_disc = torch.load('saved_models/dp_gan_discriminator.pt')
-    generator.load_state_dict(saved_gen['state_dict'])
+    # saved_gen = torch.load('saved_models/dp_gan_generator.pt')
+    # saved_disc = torch.load('saved_models/dp_gan_discriminator.pt')
+    # generator.load_state_dict(saved_gen['state_dict'])
     # discriminator.load_state_dict(saved_disc['state_dict'])
 
-    avg_score = evaluate_test_set(generator, train_dataloader, test_dataloader, max_length=MAX_LENGTH)
-    print('avg blue score:', avg_score)
+    # avg_score = evaluate_test_set(generator, train_dataloader, test_dataloader, max_length=MAX_LENGTH)
+    # print('avg blue score:', avg_score)

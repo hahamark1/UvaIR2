@@ -10,7 +10,7 @@ class FConvEncoder(nn.Module):
     """Convolutional encoder"""
 
 
-    def __init__(self, vocab_size, embed_dim=1024, convolutions=((512, 3),) * 20,
+    def __init__(self, vocab_size, embed_dim=HIDDEN_SIZE, convolutions=((HIDDEN_SIZE, 3),) * 20,
                  dropout=0.1):
 
         super(FConvEncoder, self).__init__()
