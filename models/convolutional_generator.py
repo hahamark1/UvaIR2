@@ -4,13 +4,14 @@ import random
 
 
 class ConvEncoderRNNDecoder(nn.Module):
-    def __init__(self, encoder, decoder, max_length=MAX_LENGTH, criterion=nn.CrossEntropyLoss(ignore_index=0), dpgan=False):
+    def __init__(self, encoder, decoder, max_length=MAX_LENGTH, criterion=nn.CrossEntropyLoss(ignore_index=0), num_layers=1, dpgan=False):
 
         super(ConvEncoderRNNDecoder, self).__init__()
         self.encoder = encoder
         self.decoder = decoder
         self.max_length = max_length
         self.criterion = criterion
+        self.num_layers = num_layers
         self.dpgan = dpgan
 
     def forward(self, input_tensor, target_tensor):
@@ -29,7 +30,10 @@ class ConvEncoderRNNDecoder(nn.Module):
             encoder_outputs[ei + (self.max_length - input_length), :, :] = encoder_hidden[ei, :, :]
 
         decoder_input = torch.tensor([[SOS_INDEX] * batch_size], device=DEVICE).transpose(0, 1)
-        decoder_hidden = encoder_hidden[-1, :, :].unsqueeze(0)
+
+        decoder_hidden = encoder_hidden[-1, :, :]
+        decoder_hidden = torch.stack([decoder_hidden] * self.num_layers, 0)
+
         generator_output = torch.zeros(target_length, batch_size, device=DEVICE).long()
 
         use_teacher_forcing = True if random.random() < TEACHER_FORCING_RATIO else False

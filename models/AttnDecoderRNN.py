@@ -11,6 +11,7 @@ class AttnDecoderRNN(nn.Module):
         self.output_size = output_size
         self.dropout_p = dropout_p
         self.max_length = max_length
+        self.num_layers = num_layers
 
         self.embedding = nn.Embedding(self.output_size, self.hidden_size)
         self.attn = nn.Linear(self.hidden_size * 2, self.max_length)
@@ -33,10 +34,18 @@ class AttnDecoderRNN(nn.Module):
         batch_size = input.shape[0]
         embedded = self.embedding(input).view(1, batch_size, -1)
         embedded = self.dropout(embedded)
+
         if self.LSTM == 'LSTM':
-            concat = torch.cat((embedded, hidden[0][-1].unsqueeze(0)), 2)
+            if self.num_layers > 1:
+                concat = torch.cat((embedded, hidden[0][-1].unsqueeze(0)), 2)
+            else:
+                concat = torch.cat((embedded, hidden[0]), 2)
         else:
-            concat = torch.cat((embedded, hidden), 2)
+            if self.num_layers > 1:
+                concat = torch.cat((embedded, hidden[-1].unsqueeze(0)), 2)
+            else:
+                concat = torch.cat((embedded, hidden), 2)
+
         concat = self.attn(concat)
         attn_weights = F.softmax(concat, dim=2)
 
@@ -44,7 +53,7 @@ class AttnDecoderRNN(nn.Module):
         encoder_outputs = encoder_outputs.transpose(0, 1)
 
         attn_applied = torch.bmm(attn_weights, encoder_outputs)
-        attn_applied = attn_applied.transpose(0 ,1)
+        attn_applied = attn_applied.transpose(0, 1)
 
         output = torch.cat((embedded, attn_applied), 2)
 
@@ -52,8 +61,7 @@ class AttnDecoderRNN(nn.Module):
 
         output = self.relu(output)
 
-
-        output, hidden = self.gru(output, hidden)
+        output, hidden = self.gru(output, hidden.contiguous())
 
         output = self.out(output)
         output = output.squeeze(0)

@@ -25,9 +25,9 @@ from constants import *
 from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
 from torch.utils.data import Dataset, DataLoader
 import os
-from nlgeval import NLGEval
+#from nlgeval import NLGEval
 from collections import defaultdict
-nlgeval = NLGEval()
+#nlgeval = NLGEval()
 
 
 NUM_EPOCHS = 1000
@@ -124,15 +124,14 @@ def run_training(generator, discriminator, train_dataloader, test_dataloader, pr
     disc_scheduler = optim.lr_scheduler.ReduceLROnPlateau(disc_optimizer, factor=0.2, patience=3, threshold=0.5, min_lr=1e-4,
                                                      verbose=True)
 
-    total_gen_loss = np.inf
-    total_disc_loss = np.inf
+    total_gen_loss = 0
+    total_disc_loss = 0
 
     metrics_dict = defaultdict(list)
 
-    for epoch in range(NUM_EPOCHS):
+    for epoch in range(NUM_EPOCHS + pre_train_epochs):
 
         pretrain = epoch < pre_train_epochs
-        # pretrain_disc = epoch < (gen_pre_train_epochs + disc_pre_train_epochs)
 
         for i, (input_tensor, target_tensor) in enumerate(train_dataloader):
             iteration = epoch * len(train_dataloader) + i
@@ -305,25 +304,25 @@ if __name__ == '__main__':
     vocab_size = dd_loader.vocabulary.n_words
 
     if convolutional:
-        ConvEncoder = FConvEncoder(dd_loader.vocabulary.n_words, embed_dim=HIDDEN_SIZE)
-        AttnDecoderRNN = AttnDecoderRNN(hidden_size=HIDDEN_SIZE, output_size=dd_loader.vocabulary.n_words)
-        generator = ConvEncoderRNNDecoder(ConvEncoder, AttnDecoderRNN,
+        ConvEncoder = FConvEncoder(vocab_size, HIDDEN_SIZE)
+        AttnDecoderRNN = AttnDecoderRNN(HIDDEN_SIZE, vocab_size, num_layers=NUM_LAYERS, LSTM='GRU')
+        generator = ConvEncoderRNNDecoder(ConvEncoder, AttnDecoderRNN, num_layers=NUM_LAYERS,
                                      criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False), dpgan=True).to(DEVICE)
 
         # Initialize the discriminator
-        disc_encoder = FConvEncoder(vocab_size, HIDDEN_SIZE).to(DEVICE)
-        disc_decoder = DecoderRNN(HIDDEN_SIZE, vocab_size).to(DEVICE)
-        discriminator = ConvDiscriminator(disc_encoder, disc_decoder, vocab_size).to(DEVICE)
+        disc_encoder = FConvEncoder(vocab_size, HIDDEN_SIZE)
+        disc_decoder = DecoderRNN(HIDDEN_SIZE, vocab_size, num_layers=NUM_LAYERS, LSTM='GRU')
+        discriminator = ConvDiscriminator(disc_encoder, disc_decoder, vocab_size, num_layers=NUM_LAYERS).to(DEVICE)
 
     else:
         # Initialize the generator
-        gen_encoder = EncoderRNN(vocab_size, HIDDEN_SIZE).to(DEVICE)
-        gen_decoder = AttnDecoderRNN(HIDDEN_SIZE, vocab_size).to(DEVICE)
-        generator = Generator(gen_encoder, gen_decoder, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False))
+        gen_encoder = EncoderRNN(vocab_size, HIDDEN_SIZE, num_layers=NUM_LAYERS, LSTM='GRU')
+        gen_decoder = AttnDecoderRNN(HIDDEN_SIZE, vocab_size, num_layers=NUM_LAYERS, LSTM='GRU')
+        generator = Generator(gen_encoder, gen_decoder, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False)).to(DEVICE)
 
         # Initialize the discriminator
-        disc_encoder = EncoderRNN(vocab_size, HIDDEN_SIZE).to(DEVICE)
-        disc_decoder = DecoderRNN(HIDDEN_SIZE, vocab_size).to(DEVICE)
+        disc_encoder = EncoderRNN(vocab_size, HIDDEN_SIZE, num_layers=NUM_LAYERS, LSTM='GRU')
+        disc_decoder = DecoderRNN(HIDDEN_SIZE, vocab_size, num_layers=NUM_LAYERS, LSTM='GRU')
         discriminator = Discriminator(disc_encoder, disc_decoder, HIDDEN_SIZE, vocab_size).to(DEVICE)
 
 

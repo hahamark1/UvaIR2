@@ -2,7 +2,7 @@ import torch
 import os
 
 MAX_WORDS_encoder = 150
-MAX_WORDS_GEN = 20
+MAX_WORDS_GEN = 30
 
 # Cuda constants
 DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'
@@ -17,6 +17,7 @@ N_UTTERANCES_FOR_INPUT = 3
 BATCH_SIZE = 64
 HIDDEN_SIZE = 256
 EPOCHS = 70
+NUM_LAYERS = 2
 
 PATH_TO_SAVE = os.path.join('saved_models')
 PATH_TO_TRAIN_DATA = 'data/dailydialog/train/dialogues_train.txt'

@@ -9,7 +9,7 @@ from constants import *
 from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
 from torch.utils.data import DataLoader
 import os
-from utils.seq2seq_helper_funcs import plot_blue_score, plot_epoch_loss, plot_data
+from utils.seq2seq_helper_funcs import plot_epoch_loss, plot_data
 from nlgeval import NLGEval
 from collections import defaultdict
 nlgeval = NLGEval()
@@ -216,9 +216,19 @@ if __name__ == '__main__':
     try:
         generator = load_model()
     except:
-        encoder1 = EncoderRNN(dd_loader.vocabulary.n_words, HIDDEN_SIZE).to(DEVICE)
-        attn_decoder1 = AttnDecoderRNN(HIDDEN_SIZE, dd_loader.vocabulary.n_words).to(DEVICE)
-        generator = Generator(encoder1, attn_decoder1, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False))
+        encoder1 = EncoderRNN(dd_loader.vocabulary.n_words,
+                              HIDDEN_SIZE,
+                              num_layers=NUM_LAYERS,
+                              LSTM='GRU')
+        attn_decoder1 = AttnDecoderRNN(HIDDEN_SIZE,
+                                       dd_loader.vocabulary.n_words,
+                                       num_layers=NUM_LAYERS,
+                                       LSTM='GRU')
+        generator = Generator(encoder1,
+                              attn_decoder1,
+                              num_layers=NUM_LAYERS,
+                              LSTM='GRU',
+                              criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False)).to(DEVICE)
 
     print('Training the model with a max length of: {}'.format(MAX_UTTERENCE_LENGTH))
 

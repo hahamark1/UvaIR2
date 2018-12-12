@@ -8,8 +8,7 @@ from constants import *
 from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
 from torch.utils.data import DataLoader
 import os
-from utils.seq2seq_helper_funcs import plot_blue_score, plot_epoch_loss, plot_data
-from evaluation.BlueEvaluator import BlueEvaluator
+from utils.seq2seq_helper_funcs import plot_epoch_loss, plot_data
 from nlgeval import NLGEval
 from collections import defaultdict
 nlgeval = NLGEval()
@@ -137,7 +136,8 @@ def evaluate(encoder, decoder, input_tensor, max_length=MAX_LENGTH):
             encoder_outputs[ei + max_length - input_length, :, :] = encoder_hidden[ei, :, :]
 
         decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).transpose(0, 1)
-        decoder_hidden = encoder_hidden[-1, :, :].unsqueeze(0)
+        decoder_hidden = encoder_hidden[-1, :, :]
+        decoder_hidden = torch.stack([decoder_hidden] * NUM_LAYERS, 0)
 
         decoded_words = []
 
@@ -211,7 +211,6 @@ def run_nlgeval(generator, test_dataloader):
 
     return metrics_dict
 
-
 if __name__ == '__main__':
 
     dd_loader, train_dataloader, test_dataloader = load_dataset()
@@ -220,9 +219,15 @@ if __name__ == '__main__':
         CERD = load_model()
         print('Succesfully loaded the model')
     except:
-        ConvEncoder = FConvEncoder(dd_loader.vocabulary.n_words, embed_dim=HIDDEN_SIZE)
-        AttnDecoderRNN = AttnDecoderRNN(hidden_size=HIDDEN_SIZE, output_size=dd_loader.vocabulary.n_words)
-        CERD = ConvEncoderRNNDecoder(ConvEncoder, AttnDecoderRNN, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False)).to(DEVICE)
+        ConvEncoder = FConvEncoder(dd_loader.vocabulary.n_words, HIDDEN_SIZE)
+        AttnDecoderRNN = AttnDecoderRNN(hidden_size=HIDDEN_SIZE,
+                                        output_size=dd_loader.vocabulary.n_words,
+                                        num_layers=NUM_LAYERS,
+                                        LSTM='GRU')
+        CERD = ConvEncoderRNNDecoder(ConvEncoder,
+                                     AttnDecoderRNN,
+                                     criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False),
+                                     num_layers=NUM_LAYERS).to(DEVICE)
 
     trainIters(CERD, train_dataloader, test_dataloader, num_epochs=EPOCHS, save_every=500)
 

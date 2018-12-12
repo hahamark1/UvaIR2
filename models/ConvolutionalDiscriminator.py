@@ -4,13 +4,14 @@ import random
 
 
 class ConvDiscriminator(nn.Module):
-    def __init__(self, encoder, decoder, vocab_size, max_length=MAX_LENGTH, criterion=nn.CrossEntropyLoss(ignore_index=0)):
+    def __init__(self, encoder, decoder, vocab_size, max_length=MAX_LENGTH, num_layers=NUM_LAYERS, criterion=nn.CrossEntropyLoss(ignore_index=0)):
 
         super(ConvDiscriminator, self).__init__()
         self.encoder = encoder
         self.decoder = decoder
         self.max_length = max_length
         self.vocab_size = vocab_size
+        self.num_layers = num_layers
         self.sigmoid = nn.Sigmoid()
         self.loss_fnc = nn.BCELoss()
 
@@ -29,7 +30,8 @@ class ConvDiscriminator(nn.Module):
             encoder_outputs[ei + (self.max_length - input_length), :, :] = encoder_hidden[ei, :, :]
 
         decoder_input = torch.tensor([[SOS_INDEX] * batch_size], device=DEVICE).transpose(0, 1)
-        decoder_hidden = encoder_hidden[-1, :, :].unsqueeze(0)
+        decoder_hidden = encoder_hidden[-1, :, :]
+        decoder_hidden = torch.stack([decoder_hidden] * self.num_layers, 0)
         decoder_outputs = torch.zeros(batch_size, target_length, self.vocab_size, device=DEVICE)
 
         decoder_input = decoder_input.contiguous()
