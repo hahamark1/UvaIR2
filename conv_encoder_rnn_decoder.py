@@ -158,54 +158,10 @@ def evaluate(encoder, decoder, input_tensor, max_length=MAX_LENGTH):
 
     return decoded_words
 
-def evaluate_test_set(generator, test_dataloader, max_length=MAX_LENGTH):
-
-    encoder = generator.encoder
-    decoder = generator.decoder
-
-    BLUE = BlueEvaluator(test_dataloader.dataset.vocabulary.index2word)
-
-    scores = []
-
-    with torch.no_grad():
-
-        for i, (input_tensor, target_tensor) in enumerate(test_dataloader):
-
-            input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
-
-            batch_size = input_tensor.shape[0]
-            input_length = input_tensor.shape[1]
-
-            encoder_outputs = torch.zeros(max_length, batch_size, encoder.hidden_size, device=DEVICE)
-            encoder_hidden = encoder.forward(input_tensor).transpose(0, 1)
-
-            for ei in range(input_length):
-                encoder_outputs[ei + (max_length - input_length), :, :] = encoder_hidden[ei, :, :]
-
-            decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).transpose(0, 1)
-            decoder_hidden = encoder_hidden[-1, :, :].unsqueeze(0)
-
-            decoded_words = []
-
-            for di in range(MAX_WORDS_GEN):
-                decoder_output, decoder_hidden, _ = decoder(decoder_input, decoder_hidden, encoder_outputs)
-                topv, topi = decoder_output.data.topk(1)
-
-                if topi.item() == EOS_INDEX:
-                    decoded_words.append(EOS_INDEX)
-                    break
-                else:
-                    decoded_words.append(topi.item())
-
-                decoder_input = topi.detach()
-
-            score = BLUE.list_to_blue(decoded_words, target_tensor.cpu().tolist()[0])
-            scores.append(score)
-
-    average_score = sum(scores) / len(scores)
-    return average_score
 
 def run_nlgeval(generator, test_dataloader):
+
+    generator.eval()
 
     references = []
     hypothesis = []
@@ -250,6 +206,8 @@ def run_nlgeval(generator, test_dataloader):
         hypothesis.append(corpus.list_to_sent(decoded_words))
 
     metrics_dict = nlgeval.compute_metrics(references, hypothesis)
+
+    generator.train()
 
     return metrics_dict
 

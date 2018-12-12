@@ -230,6 +230,8 @@ def evaluate(generator, discriminator, context_tensor, target_sentence, dataload
 
 def run_nlgeval(generator, test_dataloader):
 
+    generator.eval()
+
     references = []
     hypothesis = []
 
@@ -273,6 +275,8 @@ def run_nlgeval(generator, test_dataloader):
         hypothesis.append(corpus.list_to_sent(decoded_words))
 
     metrics_dict = nlgeval.compute_metrics(references, hypothesis)
+
+    generator.train()
 
     return metrics_dict
 

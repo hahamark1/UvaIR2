@@ -16,20 +16,19 @@ nlgeval = NLGEval()
 
 def load_model(length=MAX_UTTERENCE_LENGTH):
     """ Load the model if it is available"""
-
     return torch.load(os.path.join(PATH_TO_SAVE, 'generator_{}.pt'.format(length))).to(DEVICE)
 
-def train(input_tensor, target_tensor, generator, optimizer, criterion, max_length=MAX_LENGTH):
+def train(input_tensor, target_tensor, generator, optimizer):
 
     optimizer.zero_grad()
-    loss = generator(input_tensor, target_tensor)
+    loss, _ = generator(input_tensor, target_tensor)
     loss.backward()
     optimizer.step()
     target_length = target_tensor.shape[1]
 
     return loss.item() / target_length
 
-def load_dataset():
+def load_dataset(reversed=False):
     """ Load the training and test sets """
 
 
@@ -37,7 +36,7 @@ def load_dataset():
     train_dataloader = DataLoader(train_dd_loader, batch_size=BATCH_SIZE, shuffle=True, num_workers=0,
                             collate_fn=PadCollate())
 
-    test_dd_loader = DailyDialogLoader(PATH_TO_TEST_DATA, load=True)
+    test_dd_loader = DailyDialogLoader(PATH_TO_TEST_DATA, load=True, reversed=reversed)
     test_dataloader = DataLoader(test_dd_loader, batch_size=1, shuffle=False, num_workers=0,
                             collate_fn=PadCollate())
 
@@ -47,7 +46,7 @@ def load_dataset():
 
 
 def trainIters(generator, train_dataloader, test_dataloader, num_epochs=EPOCHS, print_every=100,
-               evaluate_every=100, save_every=100, learning_rate=0.01):
+               evaluate_every=100, save_every=500, learning_rate=0.01):
 
     optimizer = optim.RMSprop(generator.parameters(), lr=learning_rate)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=3, threshold=0.5, min_lr=1e-4,
@@ -67,7 +66,7 @@ def trainIters(generator, train_dataloader, test_dataloader, num_epochs=EPOCHS, 
 
             input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
 
-            loss = train(input_tensor, target_tensor, generator, optimizer, generator.criterion)
+            loss = train(input_tensor, target_tensor, generator, optimizer)
 
             iter_loss += loss
             epoch_loss += loss
@@ -98,7 +97,7 @@ def trainIters(generator, train_dataloader, test_dataloader, num_epochs=EPOCHS, 
 
             if num_iters % save_every == 0 and num_iters > 0:
                 torch.save(generator,
-                           os.path.join('saved_models', 'conv_encoder_rnn_decoder_{}.pt'.format(MAX_UTTERENCE_LENGTH)))
+                           os.path.join('saved_models', 'rnn_encoder_rnn_decoder_{}.pt'.format(MAX_UTTERENCE_LENGTH)))
 
             num_iters += 1
             iter += 1
@@ -109,11 +108,6 @@ def trainIters(generator, train_dataloader, test_dataloader, num_epochs=EPOCHS, 
         plot_epoch_loss(losses)
         print('After epoch {} the loss is {}'.format(epoch, epoch_loss_avg))
 
-        # average_score = evaluate_test_set(generator, test_dataloader)
-        # blue_scores.append(average_score)
-        # plot_blue_score(blue_scores)
-        # print('After epoch {} the average Blue score of the test set is: {}'.format(epoch, average_score))
-
         d = run_nlgeval(generator, test_dataloader)
         for key, value in d.items():
             metrics_dict[key].append(value)
@@ -122,6 +116,10 @@ def trainIters(generator, train_dataloader, test_dataloader, num_epochs=EPOCHS, 
         print('After epoch {} the metrics dict is: {}'.format(epoch, metrics_dict))
 
 def evaluate(encoder, decoder, input_tensor, max_length=MAX_LENGTH):
+
+    encoder.eval()
+    decoder.eval()
+
     with torch.no_grad():
 
         input_tensor = input_tensor.view(1, -1)
@@ -132,7 +130,7 @@ def evaluate(encoder, decoder, input_tensor, max_length=MAX_LENGTH):
 
         for ei in range(input_length):
             encoder_output, encoder_hidden = encoder(input_tensor[:, ei], encoder_hidden)
-            encoder_outputs[ei, :, :] = encoder_output[0, :, :]
+            encoder_outputs[ei + max_length - input_length, :, :] = encoder_output[0, :, :]
 
         decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).view(-1, 1)  # SOS
 
@@ -152,9 +150,14 @@ def evaluate(encoder, decoder, input_tensor, max_length=MAX_LENGTH):
 
             decoder_input = topi.detach()
 
-        return decoded_words
+    encoder.train()
+    decoder.train()
+
+    return decoded_words
 
 def run_nlgeval(generator, test_dataloader):
+
+    generator.eval()
 
     references = []
     hypothesis = []
@@ -169,17 +172,18 @@ def run_nlgeval(generator, test_dataloader):
         input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
         target_sent = corpus.tokens_to_sent(target_tensor.view(-1))
 
-        batch_size = input_tensor.shape[0]
         input_length = input_tensor.shape[1]
 
-        encoder_outputs = torch.zeros(MAX_LENGTH, batch_size, encoder.hidden_size, device=DEVICE)
-        encoder_hidden = encoder.forward(input_tensor).transpose(0, 1)
+        encoder_outputs = torch.zeros(MAX_LENGTH, 1, encoder.hidden_size, device=DEVICE)
+        encoder_hidden = None
 
         for ei in range(input_length):
-            encoder_outputs[ei + (MAX_LENGTH - input_length), :, :] = encoder_hidden[ei, :, :]
+            encoder_output, encoder_hidden = encoder(input_tensor[:, ei], encoder_hidden)
+            encoder_outputs[ei + MAX_LENGTH - input_length, :, :] = encoder_output[0, :, :]
 
-        decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).transpose(0, 1)
-        decoder_hidden = encoder_hidden[-1, :, :].unsqueeze(0)
+        decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).view(-1, 1)  # SOS
+
+        decoder_hidden = encoder_hidden
 
         decoded_words = []
 
@@ -199,6 +203,8 @@ def run_nlgeval(generator, test_dataloader):
         hypothesis.append(corpus.list_to_sent(decoded_words))
 
     metrics_dict = nlgeval.compute_metrics(references, hypothesis)
+
+    generator.train()
 
     return metrics_dict
 
