@@ -13,6 +13,9 @@ from evaluation.BlueEvaluator import BlueEvaluator
 from nlgeval import NLGEval
 
 nlgeval = NLGEval()
+PRINT_EVERY = 400
+SAVE_EVERY = 1000
+EVALUATE_EVERY = 100
 
 def load_model(length=MAX_UTTERENCE_LENGTH):
     """ Load the model if it is available"""
@@ -223,6 +226,7 @@ def evaluate_test_set(generator, test_dataloader, max_length=MAX_LENGTH):
 
                 decoder_input = topi.detach()
 
+
             test_sentence = input_tensor[0, :]
             real_test_sentence = train_dataloader.dataset.vocabulary.tokens_to_sent(test_sentence)
 
@@ -236,14 +240,14 @@ def evaluate_test_set(generator, test_dataloader, max_length=MAX_LENGTH):
 
             references.append([generated_sentence])
             hypothesis.append(real_target_sentence)
-
-            print(real_test_sentence)
-            print('>>')
-            print(generated_sentence)
-            print('==')
-            print(real_target_sentence)
-            print('-----------------------------')
-            scores.append(score)
+            if i % PRINT_EVERY == 0:
+                print(real_test_sentence)
+                print('>>')
+                print(generated_sentence)
+                print('==')
+                print(real_target_sentence)
+                print('-----------------------------')
+                scores.append(score)
     metrics_dict = nlgeval.compute_metrics(references, hypothesis)
 
     average_score = sum(scores) / len(scores)

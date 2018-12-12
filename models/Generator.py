@@ -14,20 +14,7 @@ class Generator(nn.Module):
         self.LSTM = LSTM
 
     def forward(self, input_tensor, target_tensor):
-        batch_size = input_tensor.shape[0]
-        input_length = input_tensor.shape[1]
 
-        targclass Generator(nn.Module):
-    def __init__(self, encoder, decoder, LSTM='LSTM', num_layers=1, max_length=MAX_LENGTH, criterion=nn.NLLLoss()):
-        super(Generator, self).__init__()
-        self.encoder = encoder
-        self.decoder = decoder
-        self.max_length = max_length
-        self.criterion = criterion
-        self.num_layers = num_layers
-        self.LSTM = LSTM
-
-    def forward(self, input_tensor, target_tensor):
         batch_size = input_tensor.shape[0]
         input_length = input_tensor.shape[1]
 
@@ -73,6 +60,6 @@ class Generator(nn.Module):
 
         return loss
 
-        
+
 if __name__ == '__main__':
     exit()
