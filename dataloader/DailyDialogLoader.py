@@ -92,8 +92,6 @@ class Vocabulary():
 		if load:
 			self.load_vocabulary()
 			self.loaded = True
-			print('Loaded the dictionary')
-
 
 	def add_word(self, word):
 
@@ -120,7 +118,7 @@ class Vocabulary():
 	def tokens_to_sent(self, tensor):
 		tensor_list = tensor.cpu().data.numpy().tolist()
 		sentence = [self.index2word[token] for token in tensor_list]
-		sentence = [word for word in sentence if word != self.padding_token]
+		sentence = [word for word in sentence if word not in [self.padding_token]]
 		return " ".join(sentence)
 
 	def list_to_sent(self, list):
@@ -137,8 +135,6 @@ class Vocabulary():
 		with open(os.path.join(PATH_TO_SAVE, 'word2index_index2word.p'), 'wb') as handle:
 			pickle.dump((self.word2index, self.index2word), handle)
 
-		print('Wrote the vocabulary to a pickle')
-
 	def load_vocabulary(self):
 		""" Load a saved vocabulary and word2index and index2word"""
 
@@ -153,7 +149,7 @@ class Vocabulary():
 
 class DailyDialogLoader(Dataset):
 
-	def __init__(self, path_to_data, load=False):
+	def __init__(self, path_to_data, load=False, verbose=True, reversed=False):
 		self.path_to_data = path_to_data
 
 		# Initalize a Vocabulary object
@@ -170,6 +166,7 @@ class DailyDialogLoader(Dataset):
 
 		# Init the self.dialogues
 		self.dialogues = []
+		self.reversed = reversed
 
 		# Execute the functions to load the data
 		self.read_txt(utterance_length=N_UTTERANCES_FOR_INPUT)
@@ -182,8 +179,9 @@ class DailyDialogLoader(Dataset):
 
 		self.max_words = np.max([len(x) for x in self.inputs])
 
-		print('Starting to train with {} dialogue pairs'.format(len(self.dialogues)))
-		print('The vocab size is {}'.format(self.vocabulary.n_words))
+		if verbose:
+			print('Starting to train with {} dialogue pairs'.format(len(self.dialogues)))
+			print('The vocab size is {}'.format(self.vocabulary.n_words))
 
 		if not load:
 			self.vocabulary.save_vocabulary()
@@ -248,6 +246,9 @@ class DailyDialogLoader(Dataset):
 		for question, answer in self.dialogues:
 
 			question = [self.word_to_onehot(word) for word in question.split(' ')]
+			if self.reversed:
+				question.reverse()
+
 			answer = [self.word_to_onehot(word) for word in answer.split(' ')]
 
 			self.one_hot_dialogues.append((question, answer))
@@ -277,7 +278,6 @@ class PadCollate:
 		"""
 		args:
 		    batch - list of [input, target]
-
 		return:
 		    inputs - a tensor of all inputs in batch after padding
 		    targets - a tensor of all targets in batch after padding
@@ -303,7 +303,6 @@ class PadCollate:
 		args:
 		    vec - tensor to pad
 		    pad - the size to pad to
-
 		return:
 		    a new tensor padded to 'pad' in dimension 'dim'
 		"""
@@ -336,4 +335,4 @@ if __name__ == '__main__':
 			continue
 			#print(dataloader.dataset.vocabulary.tokens_to_sent(data[j]))
 			#print(dataloader.dataset.vocabulary.tokens_to_sent(target[j]))
-			#print('')
+#print('')
