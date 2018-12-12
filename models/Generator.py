@@ -54,7 +54,7 @@ class Generator(nn.Module):
 
                 loss += self.criterion(decoder_output, target_tensor[:, di])
 
-        generator_output = generator_output.permute(1, 0) # TODO: check deze
+        generator_output = generator_output.permute(1, 0)
         return loss, generator_output
 
     def generate_sentence(self, context_tensor):

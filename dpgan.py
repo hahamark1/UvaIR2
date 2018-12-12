@@ -14,6 +14,7 @@ from models.convolutional_encoder import FConvEncoder
 from models.convolutional_generator import ConvEncoderRNNDecoder
 from models.Generator import Generator
 from models.Discriminator import Discriminator
+from models.ConvolutionalDiscriminator import ConvDiscriminator
 from evaluation.BlueEvaluator import BlueEvaluator
 import random
 import time
@@ -110,7 +111,7 @@ def print_info(total_gen_loss, total_disc_loss, epoch, iteration):
                             epoch, iteration, avg_gen_loss, avg_disc_loss))
 
 
-def run_training(generator, discriminator, dataloader, pre_train_epochs):
+def run_training(generator, discriminator, dataloader, pre_train_epochs, convolutional):
 
     gen_optimizer = optim.RMSprop(generator.parameters(), lr=GEN_LEARNING_RATE)
     disc_optimizer = optim.RMSprop(discriminator.parameters(), lr=DISC_LEARNING_RATE)
@@ -159,21 +160,21 @@ def run_training(generator, discriminator, dataloader, pre_train_epochs):
                 test_sentence, test_target_sentence = input_tensor[0, :], target_tensor[0, :]
                 evaluate(generator, discriminator, test_sentence, test_target_sentence, dataloader)
 
-            # if iteration % SAVE_EVERY == 0 and iteration > 0:
+            if iteration % SAVE_EVERY == 0 and iteration > 0:
 
-            #     torch.save({
-            #         'epoch': epoch,
-            #         'model': generator,
-            #         'state_dict': generator.state_dict(),
-            #         'optimizer' : gen_optimizer.state_dict(),
-            #     }, os.path.join('saved_models', 'dp_gan_generator.pt'))
+                torch.save({
+                    'epoch': epoch,
+                    'model': generator,
+                    'state_dict': generator.state_dict(),
+                    'optimizer' : gen_optimizer.state_dict(),
+                }, os.path.join('saved_models', 'dp_gan_generator_{}.pt'.format('convolutional' if convolutional else 'recurrent')))
 
-            #     torch.save({
-            #         'epoch': epoch,
-            #         'model': discriminator,
-            #         'state_dict': discriminator.state_dict(),
-            #         'optimizer' : disc_optimizer.state_dict(),
-            #     }, os.path.join('saved_models', 'dp_gan_discriminator.pt'))
+                torch.save({
+                    'epoch': epoch,
+                    'model': discriminator,
+                    'state_dict': discriminator.state_dict(),
+                    'optimizer' : disc_optimizer.state_dict(),
+                }, os.path.join('saved_models', 'dp_gan_discriminator_{}.pt'.format('convolutional' if convolutional else 'recurrent')))
 
 
 
@@ -294,19 +295,19 @@ if __name__ == '__main__':
     dd_loader, train_dataloader, test_dataloader = load_dataset()
 
     vocab_size = dd_loader.vocabulary.n_words
-    hidden_size = 256
+    hidden_size = 512
 
 
     if convolutional:
         ConvEncoder = FConvEncoder(dd_loader.vocabulary.n_words, embed_dim=hidden_size)
         AttnDecoderRNN = AttnDecoderRNN(hidden_size=hidden_size, output_size=dd_loader.vocabulary.n_words)
         generator = ConvEncoderRNNDecoder(ConvEncoder, AttnDecoderRNN,
-                                     criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False)).to(DEVICE)
+                                     criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False), dpgan=True).to(DEVICE)
 
         # Initialize the discriminator
         disc_encoder = FConvEncoder(vocab_size, hidden_size).to(DEVICE)
         disc_decoder = DecoderRNN(hidden_size, vocab_size).to(DEVICE)
-        discriminator = Discriminator(disc_encoder, disc_decoder, hidden_size, vocab_size).to(DEVICE)
+        discriminator = ConvDiscriminator(disc_encoder, disc_decoder, vocab_size).to(DEVICE)
 
     else:
         # Initialize the generator
@@ -323,7 +324,7 @@ if __name__ == '__main__':
 
     # Number of epochs to pretrain the generator and discriminator, before performing adversarial training
     pre_train_epochs = 5
-    run_training(generator, discriminator, train_dataloader, pre_train_epochs)
+    run_training(generator, discriminator, train_dataloader, pre_train_epochs, convolutional)
 
     # saved_gen = torch.load('saved_models/dp_gan_generator.pt')
     # saved_disc = torch.load('saved_models/dp_gan_discriminator.pt')
