@@ -8,9 +8,10 @@ from constants import *
 from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
 from torch.utils.data import DataLoader
 import os
-from utils.seq2seq_helper_funcs import plot_blue_score, plot_epoch_loss
-from evaluation.BlueEvaluator import BlueEvaluator
+from utils.seq2seq_helper_funcs import plot_epoch_loss, plot_data
 from nlgeval import NLGEval
+from collections import defaultdict
+nlgeval = NLGEval()
 
 
 def load_model():
@@ -21,7 +22,7 @@ def load_dataset():
 
 
     train_dd_loader = DailyDialogLoader(PATH_TO_TRAIN_DATA, load=False)
-    train_dataloader = DataLoader(train_dd_loader, batch_size=16, shuffle=True, num_workers=0,
+    train_dataloader = DataLoader(train_dd_loader, batch_size=BATCH_SIZE, shuffle=True, num_workers=0,
                             collate_fn=PadCollate())
 
     test_dd_loader = DailyDialogLoader(PATH_TO_TEST_DATA, load=True)
@@ -45,17 +46,16 @@ def train(input_tensor, target_tensor, generator, optimizer):
     return loss.item() / target_length
 
 
-def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, print_every=100,
-               evaluate_every=1000, save_every=1000, learning_rate=0.25):
+def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, print_every=500,
+               evaluate_every=500, save_every=1000, learning_rate=0.01):
 
-    optimizer = optim.SGD(generator.parameters(), lr=learning_rate, momentum=0.99, nesterov=True)
-
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=10, threshold=0.5, min_lr=1e-4, verbose=True)
+    optimizer = optim.RMSprop(generator.parameters(), lr=learning_rate)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=3, threshold=0.5, min_lr=1e-4, verbose=True)
 
     num_iters = len(train_dataloader)
     iter = 0
     iter_loss = 0
-    blue_scores = []
+    metrics_dict = defaultdict(list)
     losses = []
 
     for epoch in range(num_epochs):
@@ -103,14 +103,19 @@ def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, pr
         scheduler.step(epoch_loss)
         epoch_loss_avg = epoch_loss / i
         losses.append((epoch_loss_avg))
-        print('After epoch {} the loss is {}'.format(epoch, epoch_loss_avg))
-        average_score = evaluate_test_set(generator, test_dataloader)
-        blue_scores.append(average_score)
-        plot_blue_score(blue_scores)
         plot_epoch_loss(losses)
-        print('After epoch {} the average Blue score of the test set is: {}'.format(epoch, average_score))
+        print('After epoch {} the loss is {}'.format(epoch, epoch_loss_avg))
 
-        metrics_dict = run_nlgeval(CERD, test_dataloader)
+        # average_score = evaluate_test_set(generator, test_dataloader)
+        # blue_scores.append(average_score)
+        # plot_blue_score(blue_scores)
+        # print('After epoch {} the average Blue score of the test set is: {}'.format(epoch, average_score))
+
+        d = run_nlgeval(CERD, test_dataloader)
+        for key, value in d.items():
+            metrics_dict[key].append(value)
+            plot_data(metrics_dict[key], key)
+
         print('After epoch {} the metrics dict is: {}'.format(epoch, metrics_dict))
 
 
@@ -131,7 +136,8 @@ def evaluate(encoder, decoder, input_tensor, max_length=MAX_LENGTH):
             encoder_outputs[ei + max_length - input_length, :, :] = encoder_hidden[ei, :, :]
 
         decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).transpose(0, 1)
-        decoder_hidden = encoder_hidden[-1, :, :].unsqueeze(0)
+        decoder_hidden = encoder_hidden[-1, :, :]
+        decoder_hidden = torch.stack([decoder_hidden] * NUM_LAYERS, 0)
 
         decoded_words = []
 
@@ -152,56 +158,11 @@ def evaluate(encoder, decoder, input_tensor, max_length=MAX_LENGTH):
 
     return decoded_words
 
-def evaluate_test_set(generator, test_dataloader, max_length=MAX_LENGTH):
-
-    encoder = generator.encoder
-    decoder = generator.decoder
-
-    BLUE = BlueEvaluator(test_dataloader.dataset.vocabulary.index2word)
-
-    scores = []
-
-    with torch.no_grad():
-
-        for i, (input_tensor, target_tensor) in enumerate(test_dataloader):
-
-            input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
-
-            batch_size = input_tensor.shape[0]
-            input_length = input_tensor.shape[1]
-
-            encoder_outputs = torch.zeros(max_length, batch_size, encoder.hidden_size, device=DEVICE)
-            encoder_hidden = encoder.forward(input_tensor).transpose(0, 1)
-
-            for ei in range(input_length):
-                encoder_outputs[ei + (max_length - input_length), :, :] = encoder_hidden[ei, :, :]
-
-            decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).transpose(0, 1)
-            decoder_hidden = encoder_hidden[-1, :, :].unsqueeze(0)
-
-            decoded_words = []
-
-            for di in range(MAX_WORDS_GEN):
-                decoder_output, decoder_hidden, _ = decoder(decoder_input, decoder_hidden, encoder_outputs)
-                topv, topi = decoder_output.data.topk(1)
-
-                if topi.item() == EOS_INDEX:
-                    decoded_words.append(EOS_INDEX)
-                    break
-                else:
-                    decoded_words.append(topi.item())
-
-                decoder_input = topi.detach()
-
-            score = BLUE.list_to_blue(decoded_words, target_tensor.cpu().tolist()[0])
-            scores.append(score)
-
-    average_score = sum(scores) / len(scores)
-    return average_score
 
 def run_nlgeval(generator, test_dataloader):
 
-    nlgeval = NLGEval()
+    generator.eval()
+
     references = []
     hypothesis = []
 
@@ -246,25 +207,27 @@ def run_nlgeval(generator, test_dataloader):
 
     metrics_dict = nlgeval.compute_metrics(references, hypothesis)
 
-    # Delete to save memory
-    del nlgeval
-    return metrics_dict
+    generator.train()
 
+    return metrics_dict
 
 if __name__ == '__main__':
 
     dd_loader, train_dataloader, test_dataloader = load_dataset()
 
-    embed_dim = 512
-
     try:
         CERD = load_model()
         print('Succesfully loaded the model')
     except:
-        ConvEncoder = FConvEncoder(dd_loader.vocabulary.n_words, embed_dim=embed_dim)
-        AttnDecoderRNN = AttnDecoderRNN(hidden_size=embed_dim, output_size=dd_loader.vocabulary.n_words)
-        CERD = ConvEncoderRNNDecoder(ConvEncoder, AttnDecoderRNN, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False)).to(DEVICE)
+        ConvEncoder = FConvEncoder(dd_loader.vocabulary.n_words, HIDDEN_SIZE)
+        AttnDecoderRNN = AttnDecoderRNN(hidden_size=HIDDEN_SIZE,
+                                        output_size=dd_loader.vocabulary.n_words,
+                                        num_layers=NUM_LAYERS,
+                                        LSTM='GRU')
+        CERD = ConvEncoderRNNDecoder(ConvEncoder,
+                                     AttnDecoderRNN,
+                                     criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False),
+                                     num_layers=NUM_LAYERS).to(DEVICE)
 
-    trainIters(CERD, train_dataloader, test_dataloader, num_epochs=3000, save_every=500)
-    run_nlgeval(CERD, test_dataloader)
+    trainIters(CERD, train_dataloader, test_dataloader, num_epochs=EPOCHS, save_every=500)
 

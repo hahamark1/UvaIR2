@@ -57,5 +57,17 @@ def plot_epoch_loss(losses):
     plt.savefig(os.path.join('figures', 'losses_{}.png'.format(MAX_LENGTH)))
     plt.close()
 
+def plot_data(data, title=''):
+    """ Plot the losses of each epoch """
+
+    plt.figure()
+    plt.plot(data)
+    plt.title('{} over epochs'.format(title), fontsize=17)
+    plt.xlabel('Epochs', fontsize=17)
+    plt.ylabel('{}'.format(title), fontsize=17)
+
+    plt.savefig(os.path.join('figures', '{}_{}.png'.format(title, MAX_LENGTH)))
+    plt.close()
+
 
 

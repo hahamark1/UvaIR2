@@ -10,13 +10,14 @@ class FConvEncoder(nn.Module):
     """Convolutional encoder"""
 
 
-    def __init__(self, vocab_size, embed_dim=1024, convolutions=((512, 3),) * 20,
-                 dropout=0.1):
+    def __init__(self, vocab_size, embed_dim, convolutions=((HIDDEN_SIZE, 3),) * 20,
+                 dropout=0.1, num_layers=1):
 
         super(FConvEncoder, self).__init__()
 
         self.embed_dim = embed_dim
         self.dropout = dropout
+        self.num_layers = num_layers
 
         self.embed_tokens = nn.Embedding(vocab_size, embed_dim, padding_idx=PADDING_INDEX)
         self.embed_tokens.weight.data.normal_(mean=0, std=0.1)
