@@ -251,7 +251,6 @@ def run_nlgeval(generator, test_dataloader):
 
     metrics_dict = nlgeval.compute_metrics(references, hypothesis)
 
-    # Delete to save memory
     return metrics_dict
 
 

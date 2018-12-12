@@ -18,13 +18,16 @@ from models.ConvolutionalDiscriminator import ConvDiscriminator
 from evaluation.BlueEvaluator import BlueEvaluator
 import random
 import time
-from utils.seq2seq_helper_funcs import showPlot, asMinutes, timeSince
+from utils.seq2seq_helper_funcs import showPlot, asMinutes, timeSince, plot_data
 import torch.optim as optim
 import torch.nn as nn
 from constants import *
 from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
 from torch.utils.data import Dataset, DataLoader
 import os
+from nlgeval import NLGEval
+from collections import defaultdict
+nlgeval = NLGEval()
 
 
 NUM_EPOCHS = 1000
@@ -33,8 +36,8 @@ EVALUATE_EVERY = 300
 SAVE_EVERY = 300
 TRAIN_GENERATOR_EVERY = 5
 
-GEN_LEARNING_RATE = 0.001
-DISC_LEARNING_RATE = 0.001
+GEN_LEARNING_RATE = 0.01
+DISC_LEARNING_RATE = 0.01
 
 PATH_TO_TRAIN_DATA =  'data/dailydialog/train/dialogues_train.txt'
 PATH_TO_TEST_DATA =  'data/dailydialog/test/dialogues_test.txt'
@@ -111,24 +114,28 @@ def print_info(total_gen_loss, total_disc_loss, epoch, iteration):
                             epoch, iteration, avg_gen_loss, avg_disc_loss))
 
 
-def run_training(generator, discriminator, dataloader, pre_train_epochs, convolutional):
+def run_training(generator, discriminator, train_dataloader, test_dataloader, pre_train_epochs, convolutional):
 
     gen_optimizer = optim.RMSprop(generator.parameters(), lr=GEN_LEARNING_RATE)
     disc_optimizer = optim.RMSprop(discriminator.parameters(), lr=DISC_LEARNING_RATE)
     adverserial_loss = nn.BCELoss()
+    gen_scheduler = optim.lr_scheduler.ReduceLROnPlateau(gen_optimizer, factor=0.2, patience=3, threshold=0.5, min_lr=1e-4,
+                                                     verbose=True)
+    disc_scheduler = optim.lr_scheduler.ReduceLROnPlateau(disc_optimizer, factor=0.2, patience=3, threshold=0.5, min_lr=1e-4,
+                                                     verbose=True)
 
-    scheduler = optim.lr_scheduler.StepLR(gen_optimizer, step_size=10, gamma=0.9)
+    total_gen_loss = np.inf
+    total_disc_loss = np.inf
 
-    total_gen_loss = 0
-    total_disc_loss = 0
+    metrics_dict = defaultdict(list)
 
     for epoch in range(NUM_EPOCHS):
 
         pretrain = epoch < pre_train_epochs
         # pretrain_disc = epoch < (gen_pre_train_epochs + disc_pre_train_epochs)
 
-        for i, (input_tensor, target_tensor) in enumerate(dataloader):
-            iteration = epoch * len(dataloader) + i
+        for i, (input_tensor, target_tensor) in enumerate(train_dataloader):
+            iteration = epoch * len(train_dataloader) + i
 
             input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
 
@@ -153,12 +160,11 @@ def run_training(generator, discriminator, dataloader, pre_train_epochs, convolu
             # Print stuff and save the model every so often
             if iteration % PRINT_EVERY == 0 and iteration > 0:
                 print_info(total_gen_loss, total_disc_loss, epoch, iteration)
-                total_gen_loss, total_disc_loss = 0, 0
 
             if iteration % EVALUATE_EVERY == 0 and iteration > 0:
                 # Take the first item of the batch to evaluate
                 test_sentence, test_target_sentence = input_tensor[0, :], target_tensor[0, :]
-                evaluate(generator, discriminator, test_sentence, test_target_sentence, dataloader)
+                evaluate(generator, discriminator, test_sentence, test_target_sentence, test_dataloader)
 
             if iteration % SAVE_EVERY == 0 and iteration > 0:
 
@@ -176,6 +182,14 @@ def run_training(generator, discriminator, dataloader, pre_train_epochs, convolu
                     'optimizer' : disc_optimizer.state_dict(),
                 }, os.path.join('saved_models', 'dp_gan_discriminator_{}.pt'.format('convolutional' if convolutional else 'recurrent')))
 
+        d = run_nlgeval(generator, test_dataloader)
+        for key, value in d.items():
+            metrics_dict[key].append(value)
+            plot_data(metrics_dict[key], key)
+
+        gen_scheduler.step(total_gen_loss)
+        disc_scheduler.step(total_disc_loss)
+        total_gen_loss, total_disc_loss = 0, 0
 
 
 def evaluate(generator, discriminator, context_tensor, target_sentence, dataloader):
@@ -214,69 +228,59 @@ def evaluate(generator, discriminator, context_tensor, target_sentence, dataload
         print('Disc(0): {:3.2f} Disc(1): {:3.2f}'.format(mean_disc_out_gen, mean_disc_out_true))
         print('______________________________\n\n')
 
+def run_nlgeval(generator, test_dataloader):
 
-def evaluate_test_set(generator, train_dataloader, test_dataloader, max_length=MAX_LENGTH):
+    references = []
+    hypothesis = []
+
+    corpus = test_dataloader.dataset.vocabulary
 
     encoder = generator.encoder
     decoder = generator.decoder
 
-    BLUE = BlueEvaluator(train_dataloader.dataset.vocabulary.index2word)
+    for i, (input_tensor, target_tensor) in enumerate(test_dataloader):
 
-    scores = []
+        input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
+        target_sent = corpus.tokens_to_sent(target_tensor.view(-1))
 
-    with torch.no_grad():
+        batch_size = input_tensor.shape[0]
+        input_length = input_tensor.shape[1]
 
-        for i, (input_tensor, target_tensor) in enumerate(test_dataloader):
+        encoder_outputs = torch.zeros(MAX_LENGTH, batch_size, encoder.hidden_size, device=DEVICE)
+        encoder_hidden = encoder.forward(input_tensor).transpose(0, 1)
 
-            input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
+        for ei in range(input_length):
+            encoder_outputs[ei + (MAX_LENGTH - input_length), :, :] = encoder_hidden[ei, :, :]
 
-            batch_size = input_tensor.shape[0]
-            input_length = input_tensor.shape[1]
+        decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).transpose(0, 1)
+        decoder_hidden = encoder_hidden[-1, :, :].unsqueeze(0)
 
-            # print('batch size', batch_size)
-            # print('input_length', input_length)
+        decoded_words = []
 
-            encoder_outputs = torch.zeros(max_length, batch_size, encoder.hidden_size, device=DEVICE)
-            encoder_hidden = None
+        for di in range(MAX_WORDS_GEN):
+            decoder_output, decoder_hidden, _ = decoder(decoder_input, decoder_hidden, encoder_outputs)
+            topv, topi = decoder_output.data.topk(1)
 
-            for ei in range(input_length):
-                encoder_output, encoder_hidden = encoder(input_tensor[:, ei], encoder_hidden)
-                encoder_outputs[ei, :, :] = encoder_output[0, :, :]
+            if topi.item() == EOS_INDEX:
+                decoded_words.append(EOS_INDEX)
+                break
+            else:
+                decoded_words.append(topi.item())
 
-            decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).view(-1, 1)  # SOS
-            # decoder_input = torch.tensor([[SOS_INDEX] * batch_size], device=DEVICE).transpose(0, 1)
+            decoder_input = topi.detach()
 
-            decoder_hidden = encoder_hidden
+        references.append([target_sent])
+        hypothesis.append(corpus.list_to_sent(decoded_words))
 
-            decoded_words = []
+    metrics_dict = nlgeval.compute_metrics(references, hypothesis)
 
-            for di in range(MAX_WORDS_GEN):
-                # print('dec in', decoder_input.shape)
-                # print('dec hidden', decoder_hidden.shape)
-                decoder_output, decoder_hidden, _ = decoder(decoder_input, decoder_hidden, encoder_outputs)
-                topv, topi = decoder_output.data.topk(1)
-
-                if topi.item() == EOS_INDEX:
-                    decoded_words.append(EOS_INDEX)
-                    break
-                else:
-                    decoded_words.append(topi.item())
-
-                decoder_input = topi.detach()
-
-            score = BLUE.list_to_blue(decoded_words, target_tensor.cpu().tolist()[0])
-            scores.append(score)
-
-    average_score = sum(scores) / len(scores)
-    return average_score
-
-
+    return metrics_dict
 
 def load_dataset():
     """ Load the training and test sets """
 
     train_dd_loader = DailyDialogLoader(PATH_TO_TRAIN_DATA, load=False)
-    train_dataloader = DataLoader(train_dd_loader, batch_size=16, shuffle=True, num_workers=0,
+    train_dataloader = DataLoader(train_dd_loader, batch_size=BATCH_SIZE, shuffle=True, num_workers=0,
                             collate_fn=PadCollate())
 
     test_dd_loader = DailyDialogLoader(PATH_TO_TEST_DATA, load=True)
@@ -295,36 +299,34 @@ if __name__ == '__main__':
     dd_loader, train_dataloader, test_dataloader = load_dataset()
 
     vocab_size = dd_loader.vocabulary.n_words
-    hidden_size = 512
-
 
     if convolutional:
-        ConvEncoder = FConvEncoder(dd_loader.vocabulary.n_words, embed_dim=hidden_size)
-        AttnDecoderRNN = AttnDecoderRNN(hidden_size=hidden_size, output_size=dd_loader.vocabulary.n_words)
+        ConvEncoder = FConvEncoder(dd_loader.vocabulary.n_words, embed_dim=HIDDEN_SIZE)
+        AttnDecoderRNN = AttnDecoderRNN(hidden_size=HIDDEN_SIZE, output_size=dd_loader.vocabulary.n_words)
         generator = ConvEncoderRNNDecoder(ConvEncoder, AttnDecoderRNN,
                                      criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False), dpgan=True).to(DEVICE)
 
         # Initialize the discriminator
-        disc_encoder = FConvEncoder(vocab_size, hidden_size).to(DEVICE)
-        disc_decoder = DecoderRNN(hidden_size, vocab_size).to(DEVICE)
+        disc_encoder = FConvEncoder(vocab_size, HIDDEN_SIZE).to(DEVICE)
+        disc_decoder = DecoderRNN(HIDDEN_SIZE, vocab_size).to(DEVICE)
         discriminator = ConvDiscriminator(disc_encoder, disc_decoder, vocab_size).to(DEVICE)
 
     else:
         # Initialize the generator
-        gen_encoder = EncoderRNN(vocab_size, hidden_size).to(DEVICE)
-        gen_decoder = AttnDecoderRNN(hidden_size, vocab_size).to(DEVICE)
+        gen_encoder = EncoderRNN(vocab_size, HIDDEN_SIZE).to(DEVICE)
+        gen_decoder = AttnDecoderRNN(HIDDEN_SIZE, vocab_size).to(DEVICE)
         generator = Generator(gen_encoder, gen_decoder, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False))
 
         # Initialize the discriminator
-        disc_encoder = EncoderRNN(vocab_size, hidden_size).to(DEVICE)
-        disc_decoder = DecoderRNN(hidden_size, vocab_size).to(DEVICE)
-        discriminator = Discriminator(disc_encoder, disc_decoder, hidden_size, vocab_size).to(DEVICE)
+        disc_encoder = EncoderRNN(vocab_size, HIDDEN_SIZE).to(DEVICE)
+        disc_decoder = DecoderRNN(HIDDEN_SIZE, vocab_size).to(DEVICE)
+        discriminator = Discriminator(disc_encoder, disc_decoder, HIDDEN_SIZE, vocab_size).to(DEVICE)
 
 
 
     # Number of epochs to pretrain the generator and discriminator, before performing adversarial training
     pre_train_epochs = 5
-    run_training(generator, discriminator, train_dataloader, pre_train_epochs, convolutional)
+    run_training(generator, discriminator, train_dataloader, test_dataloader, pre_train_epochs, convolutional)
 
     # saved_gen = torch.load('saved_models/dp_gan_generator.pt')
     # saved_disc = torch.load('saved_models/dp_gan_discriminator.pt')
