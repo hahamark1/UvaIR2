@@ -7,12 +7,16 @@ MAX_WORDS_GEN = 20
 # Cuda constants
 DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
-MAX_UTTERENCE_LENGTH = 15
-MAX_LENGTH = 15
+MAX_UTTERENCE_LENGTH = 30
+MAX_LENGTH = 30
 
 TEACHER_FORCING_RATIO = 0.5
 
 N_UTTERANCES_FOR_INPUT = 3
+
+BATCH_SIZE = 64
+HIDDEN_SIZE = 256
+EPOCHS = 70
 
 PATH_TO_SAVE = os.path.join('saved_models')
 PATH_TO_TRAIN_DATA = 'data/dailydialog/train/dialogues_train.txt'

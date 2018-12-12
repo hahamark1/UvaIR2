@@ -8,9 +8,11 @@ from constants import *
 from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
 from torch.utils.data import DataLoader
 import os
-from utils.seq2seq_helper_funcs import plot_blue_score, plot_epoch_loss
+from utils.seq2seq_helper_funcs import plot_blue_score, plot_epoch_loss, plot_data
 from evaluation.BlueEvaluator import BlueEvaluator
 from nlgeval import NLGEval
+from collections import defaultdict
+nlgeval = NLGEval()
 
 
 def load_model():
@@ -21,7 +23,7 @@ def load_dataset():
 
 
     train_dd_loader = DailyDialogLoader(PATH_TO_TRAIN_DATA, load=False)
-    train_dataloader = DataLoader(train_dd_loader, batch_size=16, shuffle=True, num_workers=0,
+    train_dataloader = DataLoader(train_dd_loader, batch_size=BATCH_SIZE, shuffle=True, num_workers=0,
                             collate_fn=PadCollate())
 
     test_dd_loader = DailyDialogLoader(PATH_TO_TEST_DATA, load=True)
@@ -45,17 +47,16 @@ def train(input_tensor, target_tensor, generator, optimizer):
     return loss.item() / target_length
 
 
-def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, print_every=100,
-               evaluate_every=1000, save_every=1000, learning_rate=0.25):
+def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, print_every=500,
+               evaluate_every=500, save_every=1000, learning_rate=0.01):
 
-    optimizer = optim.SGD(generator.parameters(), lr=learning_rate, momentum=0.99, nesterov=True)
-
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=10, threshold=0.5, min_lr=1e-4, verbose=True)
+    optimizer = optim.RMSprop(generator.parameters(), lr=learning_rate)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=3, threshold=0.5, min_lr=1e-4, verbose=True)
 
     num_iters = len(train_dataloader)
     iter = 0
     iter_loss = 0
-    blue_scores = []
+    metrics_dict = defaultdict(list)
     losses = []
 
     for epoch in range(num_epochs):
@@ -103,14 +104,19 @@ def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, pr
         scheduler.step(epoch_loss)
         epoch_loss_avg = epoch_loss / i
         losses.append((epoch_loss_avg))
-        print('After epoch {} the loss is {}'.format(epoch, epoch_loss_avg))
-        average_score = evaluate_test_set(generator, test_dataloader)
-        blue_scores.append(average_score)
-        plot_blue_score(blue_scores)
         plot_epoch_loss(losses)
-        print('After epoch {} the average Blue score of the test set is: {}'.format(epoch, average_score))
+        print('After epoch {} the loss is {}'.format(epoch, epoch_loss_avg))
 
-        metrics_dict = run_nlgeval(CERD, test_dataloader)
+        # average_score = evaluate_test_set(generator, test_dataloader)
+        # blue_scores.append(average_score)
+        # plot_blue_score(blue_scores)
+        # print('After epoch {} the average Blue score of the test set is: {}'.format(epoch, average_score))
+
+        d = run_nlgeval(CERD, test_dataloader)
+        for key, value in d.items():
+            metrics_dict[key].append(value)
+            plot_data(metrics_dict[key], key)
+
         print('After epoch {} the metrics dict is: {}'.format(epoch, metrics_dict))
 
 
@@ -201,7 +207,6 @@ def evaluate_test_set(generator, test_dataloader, max_length=MAX_LENGTH):
 
 def run_nlgeval(generator, test_dataloader):
 
-    nlgeval = NLGEval()
     references = []
     hypothesis = []
 
@@ -247,7 +252,6 @@ def run_nlgeval(generator, test_dataloader):
     metrics_dict = nlgeval.compute_metrics(references, hypothesis)
 
     # Delete to save memory
-    del nlgeval
     return metrics_dict
 
 
@@ -255,16 +259,13 @@ if __name__ == '__main__':
 
     dd_loader, train_dataloader, test_dataloader = load_dataset()
 
-    embed_dim = 512
-
     try:
         CERD = load_model()
         print('Succesfully loaded the model')
     except:
-        ConvEncoder = FConvEncoder(dd_loader.vocabulary.n_words, embed_dim=embed_dim)
-        AttnDecoderRNN = AttnDecoderRNN(hidden_size=embed_dim, output_size=dd_loader.vocabulary.n_words)
+        ConvEncoder = FConvEncoder(dd_loader.vocabulary.n_words, embed_dim=HIDDEN_SIZE)
+        AttnDecoderRNN = AttnDecoderRNN(hidden_size=HIDDEN_SIZE, output_size=dd_loader.vocabulary.n_words)
         CERD = ConvEncoderRNNDecoder(ConvEncoder, AttnDecoderRNN, criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False)).to(DEVICE)
 
-    trainIters(CERD, train_dataloader, test_dataloader, num_epochs=3000, save_every=500)
-    run_nlgeval(CERD, test_dataloader)
+    trainIters(CERD, train_dataloader, test_dataloader, num_epochs=EPOCHS, save_every=500)
 
