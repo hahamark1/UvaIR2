@@ -25,9 +25,9 @@ from constants import *
 from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
 from torch.utils.data import Dataset, DataLoader
 import os
-#from nlgeval import NLGEval
+from nlgeval import NLGEval
 from collections import defaultdict
-#nlgeval = NLGEval()
+nlgeval = NLGEval()
 
 
 NUM_EPOCHS = 1000
