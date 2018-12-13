@@ -14,10 +14,10 @@ TEACHER_FORCING_RATIO = 0.5
 
 N_UTTERANCES_FOR_INPUT = 3
 
-BATCH_SIZE = 16
+BATCH_SIZE = 64
 HIDDEN_SIZE = 256
 EPOCHS = 70
-NUM_LAYERS = 1
+NUM_LAYERS = 2
 
 PATH_TO_SAVE = os.path.join('saved_models')
 PATH_TO_TRAIN_DATA = 'data/dailydialog/train/dialogues_train.txt'
