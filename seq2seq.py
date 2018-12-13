@@ -46,7 +46,7 @@ def load_dataset(reversed=False):
 
 
 def trainIters(generator, train_dataloader, test_dataloader, num_epochs=EPOCHS, print_every=100,
-               evaluate_every=100, save_every=500, learning_rate=0.01):
+               evaluate_every=500, save_every=500, learning_rate=0.01):
 
     optimizer = optim.RMSprop(generator.parameters(), lr=learning_rate)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=3, threshold=0.5, min_lr=1e-4,

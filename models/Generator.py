@@ -61,11 +61,12 @@ class Generator(nn.Module):
                 loss += self.criterion(decoder_output, target_tensor[:, di])
 
         generator_output = generator_output.permute(1, 0)
+        loss /= batch_size
         return loss, generator_output
 
     def generate_sentence(self, context_tensor):
-        
-        context_length = context_tensor.shape[1]      
+
+        context_length = context_tensor.shape[1]
 
         # Initialize an empty tensor for the outputs of the encoder
         encoder_outputs = torch.zeros(self.max_length, 1, self.encoder.hidden_size, device=DEVICE)
@@ -83,7 +84,7 @@ class Generator(nn.Module):
 
         for di in range(MAX_WORDS_GEN):
             decoder_output, decoder_hidden, _ = self.decoder(decoder_input, decoder_hidden, encoder_outputs)
-            
+
             topv, topi = decoder_output.data.topk(1)
             generator_output[di] = topi.view(-1)
 
@@ -93,7 +94,7 @@ class Generator(nn.Module):
                 break
             else:
                 decoded_words.append(topi.item())
-            
+
             decoder_input = topi.detach()
 
         return decoded_words, generator_output

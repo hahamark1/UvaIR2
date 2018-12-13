@@ -42,7 +42,7 @@ class ConvDiscriminator(nn.Module):
             decoder_output = self.sigmoid(decoder_output)
             decoder_outputs[:, di, :] = decoder_output
 
-        # Interpret the decoder output as probabilities per word in the vocabulary, 
+        # Interpret the decoder output as probabilities per word in the vocabulary,
         # and select the probabilities of the words in the given generated/true reply
         out_probabilities = torch.zeros(input_tensor.shape, device=DEVICE)
         for batch in range(decoder_outputs.shape[0]):
@@ -54,5 +54,7 @@ class ConvDiscriminator(nn.Module):
 
         # Compute a loss value using the selected probabilities and the target tensor
         loss = self.loss_fnc(out_probabilities, target)
-        
+
+        loss /= batch_size
+
         return loss, out_probabilities
