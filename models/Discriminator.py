@@ -5,7 +5,7 @@ from constants import DEVICE, SOS_INDEX
 
 class Discriminator(nn.Module):
 
-	def __init__(self, encoder, decoder, hidden_size, vocab_size):
+	def __init__(self, encoder, decoder, hidden_size, vocab_size, num_layers):
 		super(Discriminator, self).__init__()
 
 		self.encoder = encoder
@@ -13,6 +13,7 @@ class Discriminator(nn.Module):
 		self.loss_fnc = nn.BCELoss()
 		self.vocab_size = vocab_size
 		self.sigmoid = nn.Sigmoid()
+		self.num_layers = num_layers
 
 	def forward(self, context_tensor, input_tensor, true_sample):
 
@@ -23,7 +24,7 @@ class Discriminator(nn.Module):
 		encoder_input = context_tensor
 		encoder_input_length = encoder_input.shape[1]
 
-		encoder_hidden = self.encoder.initHidden(batch_size=batch_size)
+		encoder_hidden = self.encoder.initHidden(batch_size=batch_size, num_layers=self.num_layers)
 		encoder_outputs = torch.zeros(encoder_input_length, batch_size, self.encoder.hidden_size, device=DEVICE)
 
 		# Perform the encoder steps for each word in the input tensor
