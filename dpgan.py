@@ -337,16 +337,15 @@ if __name__ == '__main__':
     disc_scheduler = optim.lr_scheduler.ReduceLROnPlateau(disc_optimizer, factor=0.2, patience=3, threshold=0.5, min_lr=1e-4,
                                                      verbose=True)
 
-    saved_gen = torch.load('saved_models/dp_gan_generator_recurrent1.pt')
-    saved_disc = torch.load('saved_models/dp_gan_discriminator_recurrent1.pt')
-    generator.load_state_dict(saved_gen['state_dict'])
-    discriminator.load_state_dict(saved_disc['state_dict'])
+    # saved_gen = torch.load('saved_models/dp_gan_generator_recurrent1.pt')
+    # saved_disc = torch.load('saved_models/dp_gan_discriminator_recurrent1.pt')
+    # generator.load_state_dict(saved_gen['state_dict'])
+    # discriminator.load_state_dict(saved_disc['state_dict'])
 
-    gen_optimizer.load_state_dict(saved_gen['optimizer'])
-    disc_optimizer.load_state_dict(saved_disc['optimizer'])
+    # gen_optimizer.load_state_dict(saved_gen['optimizer'])
+    # disc_optimizer.load_state_dict(saved_disc['optimizer'])
 
-    epoch = saved_gen['epoch']
-
+    # epoch = saved_gen['epoch']
 
 
     # Number of epochs to pretrain the generator and discriminator, before performing adversarial training
