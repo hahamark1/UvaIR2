@@ -350,6 +350,7 @@ if __name__ == '__main__':
 
     # Number of epochs to pretrain the generator and discriminator, before performing adversarial training
     pre_train_epochs = 5
+    epoch = 0
     run_training(epoch, generator, discriminator, train_dataloader, test_dataloader, pre_train_epochs, convolutional, gen_optimizer, disc_optimizer, gen_scheduler, disc_scheduler)
 
     
