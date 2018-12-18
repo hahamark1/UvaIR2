@@ -38,31 +38,43 @@ class Generator(nn.Module):
 
         decoder_hidden = encoder_hidden
         generator_output = torch.zeros(target_length, batch_size, device=DEVICE).long()
+        log_probs = torch.zeros(target_length, batch_size, device=DEVICE).float()
 
         use_teacher_forcing = True if random.random() < TEACHER_FORCING_RATIO else False
 
-        if use_teacher_forcing:
-            # Teacher forcing: Feed the target as the next input
-            for di in range(target_length):
-                decoder_output, decoder_hidden, decoder_attention = self.decoder(
-                    decoder_input, decoder_hidden, encoder_outputs)
-                loss += self.criterion(decoder_output, target_tensor[:, di])
-                decoder_input = target_tensor[:, di]  # Teacher forcing
+        # if use_teacher_forcing:
+        for di in range(target_length):
+            decoder_output, decoder_hidden, decoder_attention = self.decoder(
+                decoder_input, decoder_hidden, encoder_outputs)
 
-        else:
-            # Without teacher forcing: use its own predictions as the next input
-            for di in range(target_length):
-                decoder_output, decoder_hidden, decoder_attention = self.decoder(
-                    decoder_input, decoder_hidden, encoder_outputs)
-                topv, topi = decoder_output.topk(1)
-                generator_output[di, :] = topi.view(-1)
+            topv, topi = decoder_output.topk(1)
+            generator_output[di, :] = topi.view(-1)
+            log_probs[di, :] = topv.view(-1)
+
+            loss += self.criterion(decoder_output, target_tensor[:, di])
+
+            if use_teacher_forcing:
+                decoder_input = target_tensor[:, di]  # Teacher forcing
+            else:
                 decoder_input = topi.squeeze().detach()  # detach from history as input
 
-                loss += self.criterion(decoder_output, target_tensor[:, di])
+        # else:
+        #     # Without teacher forcing: use its own predictions as the next input
+        #     for di in range(target_length):
+        #         decoder_output, decoder_hidden, decoder_attention = self.decoder(
+        #             decoder_input, decoder_hidden, encoder_outputs)
+        #         topv, topi = decoder_output.topk(1)
+        #         generator_output[di, :] = topi.view(-1)
+        #         log_probs[di, :] = topv.view(-1)
+        #         decoder_input = topi.squeeze().detach()  # detach from history as input
+
+        #         loss += self.criterion(decoder_output, target_tensor[:, di])
 
         generator_output = generator_output.permute(1, 0)
+        log_probs = log_probs.permute(1, 0)
         loss /= batch_size
-        return loss, generator_output
+
+        return loss, generator_output, log_probs
 
     def generate_sentence(self, context_tensor):
 

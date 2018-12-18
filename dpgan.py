@@ -21,6 +21,7 @@ import time
 from utils.seq2seq_helper_funcs import showPlot, asMinutes, timeSince, plot_data
 import torch.optim as optim
 import torch.nn as nn
+from torch.autograd import Variable
 from constants import *
 from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
 from torch.utils.data import Dataset, DataLoader
@@ -32,7 +33,7 @@ from collections import defaultdict
 
 NUM_EPOCHS = 70
 PRINT_EVERY = 50
-EVALUATE_EVERY = 300
+EVALUATE_EVERY = 100
 SAVE_EVERY = 300
 TRAIN_GENERATOR_EVERY = 5
 
@@ -43,28 +44,71 @@ PATH_TO_TRAIN_DATA =  'data/dailydialog/train/dialogues_train.txt'
 PATH_TO_TEST_DATA =  'data/dailydialog/test/dialogues_test.txt'
 
 
-def pretrain_generator(input_tensor, target_tensor, generator, gen_optimizer):
+def train_generator_mle(input_tensor, target_tensor, generator, gen_optimizer):
     gen_optimizer.zero_grad()
 
     # Generate a sentence and compute the loss based on the given target sentence
-    gen_loss, generated_sentence = generator(input_tensor, target_tensor)
+    gen_loss, _, _ = generator(input_tensor, target_tensor)
 
     # Train
     gen_loss.backward()
     gen_optimizer.step()
 
-    return gen_loss, generated_sentence.detach()
+    return gen_loss
 
 
-def pretrain_discriminator(input_tensor, target_tensor, generated_sentence, discriminator, disc_optimizer):
+def train_generator_adv(input_tensor, target_tensor, generator, discriminator, gen_optimizer):
+    discount_factor = 0.9
+
+    gen_optimizer.zero_grad()
+
+    # Generate a sentence and compute the loss based on the given target sentence
+    _, generated_sentence, log_probs = generator(input_tensor, target_tensor)
+
+    # Determine the discriminator loss for the generated sample
+    gen_disc_loss, gen_disc_word_reward, gen_disc_sentence_reward = discriminator(input_tensor, generated_sentence, true_sample=False)
+
+    sentence_length = gen_disc_word_reward.shape[1]
+    
+    G = 0
+    gen_loss = 0
+    # rewards = []
+    
+    # Discount future rewards back to the present using gamma
+    for i in range(sentence_length-1, -1, -1):
+        r = gen_disc_word_reward[:, i]
+        G = r + discount_factor * G
+        gen_loss -= log_probs[:, i] * G
+        # rewards.insert(0, G)
+        
+    # Scale rewards
+    # rewards = torch.stack(rewards, dim=1).float()
+    # rewards = (rewards - rewards.mean()) / (rewards.std())
+    
+    # Calculate loss
+    # gen_loss = (torch.sum(torch.mul(log_probs.float(), Variable(rewards)).mul(-1), -1))
+    gen_loss = torch.mean(gen_loss)
+
+    # Train
+    gen_loss.backward()
+    gen_optimizer.step()
+
+    return gen_loss
+
+
+def train_discriminator(input_tensor, target_tensor, generator, discriminator, disc_optimizer, generated_sentence=None):
     disc_optimizer.zero_grad()
+
+    # Generate a sentence and compute the loss based on the given target sentence
+    if not generated_sentence:
+        _, generated_sentence, _ = generator(input_tensor, target_tensor)
     
     # Determine the discriminator loss for both the true sample and the generated sample
-    generated_disc_loss, generated_disc_out = discriminator(input_tensor, generated_sentence, true_sample=False)
-    true_disc_loss, true_disc_out = discriminator(input_tensor, target_tensor, true_sample=True)
+    gen_disc_loss, gen_disc_word_reward, gen_disc_sentence_reward = discriminator(input_tensor, generated_sentence, true_sample=False)
+    true_disc_loss, true_disc_word_reward, true_disc_sentence_reward = discriminator(input_tensor, target_tensor, true_sample=True)
 
     # Compute the total discriminator loss
-    disc_loss = generated_disc_loss + true_disc_loss
+    disc_loss = gen_disc_loss + true_disc_loss
 
     # Train
     disc_loss.backward()
@@ -73,37 +117,37 @@ def pretrain_discriminator(input_tensor, target_tensor, generated_sentence, disc
     return disc_loss
 
 
-def train(input_tensor, target_tensor, generator, discriminator, adverserial_loss, gen_optimizer, disc_optimizer, train_generator):
-    if train_generator:
-        gen_optimizer.zero_grad()
-    disc_optimizer.zero_grad()
+# def train(input_tensor, target_tensor, generator, discriminator, adverserial_loss, gen_optimizer, disc_optimizer, train_generator):
+#     if train_generator:
+#         gen_optimizer.zero_grad()
+#     disc_optimizer.zero_grad()
 
-    # Generate a sentence
-    gen_loss, generated_sentence = generator(input_tensor, target_tensor)
+#     # Generate a sentence
+#     gen_loss, generated_sentence = generator(input_tensor, target_tensor)
 
-    # Compute discriminator loss and output (0-1) for both the true and the generated sample
-    generated_disc_loss, disc_generated = discriminator(input_tensor, generated_sentence.detach(), true_sample=False)
-    true_disc_loss, disc_true = discriminator(input_tensor, target_tensor, true_sample=True)
+#     # Compute discriminator loss and output (0-1) for both the true and the generated sample
+#     generated_disc_loss, disc_generated = discriminator(input_tensor, generated_sentence.detach(), true_sample=False)
+#     true_disc_loss, disc_true = discriminator(input_tensor, target_tensor, true_sample=True)
 
-    # Compute the total discriminator loss
-    disc_loss = generated_disc_loss + true_disc_loss
+#     # Compute the total discriminator loss
+#     disc_loss = generated_disc_loss + true_disc_loss
 
-    # Update the discriminator
-    disc_loss.backward(retain_graph=train_generator)
-    disc_optimizer.step()
+#     # Update the discriminator
+#     disc_loss.backward(retain_graph=train_generator)
+#     disc_optimizer.step()
 
-    # Update the generator (if necessary) based on the discriminator rewards
-    if train_generator:
-        adv_loss = adverserial_loss(disc_generated, torch.ones(disc_generated.shape, device=DEVICE))
-        total_gen_loss = gen_loss * adv_loss
-        total_gen_loss.backward()
-        gen_optimizer.step()
-        loss = total_gen_loss.item() + disc_loss.item()
-    else:
-        loss = disc_loss.item()
-        adv_loss = 0
+#     # Update the generator (if necessary) based on the discriminator rewards
+#     if train_generator:
+#         adv_loss = adverserial_loss(disc_generated, torch.ones(disc_generated.shape, device=DEVICE))
+#         total_gen_loss = gen_loss * adv_loss
+#         total_gen_loss.backward()
+#         gen_optimizer.step()
+#         loss = total_gen_loss.item() + disc_loss.item()
+#     else:
+#         loss = disc_loss.item()
+#         adv_loss = 0
     
-    return loss, (adv_loss, disc_loss)
+#     return loss, (adv_loss, disc_loss)
 
 
 def print_info(total_gen_loss, total_disc_loss, epoch, iteration):
@@ -114,44 +158,103 @@ def print_info(total_gen_loss, total_disc_loss, epoch, iteration):
                             epoch, iteration, avg_gen_loss, avg_disc_loss))
 
 
+def do_pre_training(generator, discriminator, train_dataloader, test_dataloader, gen_optimizer, disc_optimizer, pre_train_epochs):
+
+    total_gen_loss, total_disc_loss = 0, 0
+
+    print('===========================')
+    print('=== PRE TRAIN GENERATOR ===')
+    print('===========================')
+
+    # Pre training the generator using MLE
+    for pre_train_epoch in range(pre_train_epochs):
+        for i, (input_tensor, target_tensor) in enumerate(train_dataloader):
+            iteration = pre_train_epoch * len(train_dataloader) + i
+            input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
+            gen_loss = train_generator_mle(input_tensor, target_tensor, generator, gen_optimizer)
+            total_gen_loss += gen_loss
+
+            # Print stuff and save the model every so often
+            if iteration % PRINT_EVERY == 0 and iteration > 0:
+                print_info(total_gen_loss, total_disc_loss, pre_train_epoch, iteration)
+                total_gen_loss, total_disc_loss = 0, 0
+
+            if iteration % EVALUATE_EVERY == 0 and iteration > 0:
+                # Take the first item of the batch to evaluate
+                test_sentence, test_target_sentence = input_tensor[0, :], target_tensor[0, :]
+                evaluate(generator, discriminator, test_sentence, test_target_sentence, test_dataloader)
+
+    print('==========================')
+    print('=== GENERATING SAMPLES ===')
+    print('==========================')
+
+    # Generating samples for pre training the discriminator
+    generated_samples = []
+    if pre_train_epochs > 0:
+        for i, (input_tensor, target_tensor) in enumerate(train_dataloader):
+            input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
+            _, generated_sentence, _ = generator(input_tensor, target_tensor)
+            generated_samples.append(generated_sentence)
+
+    total_gen_loss, total_disc_loss = 0, 0
+
+    print('===============================')
+    print('=== PRE TRAIN DISCRIMINATOR ===')
+    print('===============================')
+
+    # Pre train the discriminator using the generated samples
+    for pre_train_epoch in range(pre_train_epochs):
+        for i, (input_tensor, target_tensor) in enumerate(train_dataloader):
+            iteration = pre_train_epoch * len(train_dataloader) + i
+            input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
+            generated_sentence = generated_samples[i]
+            disc_loss = train_discriminator(input_tensor, target_tensor, generator, discriminator, disc_optimizer, generated_sentence=None)
+            total_disc_loss += disc_loss
+
+            # Print stuff and save the model every so often
+            if iteration % PRINT_EVERY == 0 and iteration > 0:
+                print_info(total_gen_loss, total_disc_loss, pre_train_epoch, iteration)
+                total_gen_loss, total_disc_loss = 0, 0
+
+            if iteration % EVALUATE_EVERY == 0 and iteration > 0:
+                # Take the first item of the batch to evaluate
+                test_sentence, test_target_sentence = input_tensor[0, :], target_tensor[0, :]
+                evaluate(generator, discriminator, test_sentence, test_target_sentence, test_dataloader)
+
+    return generator, discriminator
+
+
 def run_training(start_epoch, generator, discriminator, train_dataloader, test_dataloader, pre_train_epochs, convolutional, gen_optimizer, disc_optimizer):
     
     adverserial_loss = nn.BCELoss()
     
-
     total_gen_loss = 0
     total_disc_loss = 0
 
+    N_TRAIN_GENERATOR = 1
+    N_TRAIN_DISCRIMINATOR = 5
+
     metrics_dict = defaultdict(list)
 
-    for epoch in range(NUM_EPOCHS + pre_train_epochs):
-        if epoch < start_epoch:
-            continue
+    generator, discriminator = do_pre_training(generator, discriminator, train_dataloader, test_dataloader,
+                                               gen_optimizer, disc_optimizer, pre_train_epochs)
 
-        pretrain = epoch < pre_train_epochs
+    for epoch in range(NUM_EPOCHS):
 
         for i, (input_tensor, target_tensor) in enumerate(train_dataloader):
             iteration = epoch * len(train_dataloader) + i
 
             input_tensor, target_tensor = input_tensor.to(DEVICE), target_tensor.to(DEVICE)
 
-            if pretrain:
-                # Pre-train the generator
-                gen_loss, generated_sentence = pretrain_generator(input_tensor, target_tensor, generator, gen_optimizer)
+            # Do adversarial training
+            for j in range(N_TRAIN_GENERATOR):
+                gen_loss = train_generator_adv(input_tensor, target_tensor, generator, discriminator, gen_optimizer)
                 total_gen_loss += gen_loss
 
-                # Pre-train the discriminator
-                disc_loss = pretrain_discriminator(input_tensor, target_tensor, generated_sentence, discriminator, disc_optimizer)
+            for j in range(N_TRAIN_DISCRIMINATOR):
+                disc_loss = train_discriminator(input_tensor, target_tensor, generator, discriminator, disc_optimizer)
                 total_disc_loss += disc_loss
 
-            else:
-                # Do adversarial training
-                # Train (n) discriminator steps for 1 generator step
-                train_generator = i % TRAIN_GENERATOR_EVERY == 0
-                _, all_losses = train(input_tensor, target_tensor, generator, discriminator, adverserial_loss,\
-                                     gen_optimizer, disc_optimizer, train_generator)
-                total_gen_loss += all_losses[0]
-                total_disc_loss += all_losses[1]
                         
             # Print stuff and save the model every so often
             if iteration % PRINT_EVERY == 0 and iteration > 0:
@@ -178,14 +281,14 @@ def run_training(start_epoch, generator, discriminator, train_dataloader, test_d
                     'optimizer' : disc_optimizer.state_dict(),
                 }, os.path.join('saved_models', 'dp_gan_discriminator_{}2.pt'.format('convolutional' if convolutional else 'recurrent')))
 
-        d = run_nlgeval(generator, test_dataloader)
-        for key, value in d.items():
-            metrics_dict[key].append(value)
-            plot_data(metrics_dict[key], key)
+        # d = run_nlgeval(generator, test_dataloader)
+        # for key, value in d.items():
+        #     metrics_dict[key].append(value)
+        #     plot_data(metrics_dict[key], key)
 
-        gen_scheduler.step(total_gen_loss)
-        disc_scheduler.step(total_disc_loss)
-        total_gen_loss, total_disc_loss = 0, 0
+        # gen_scheduler.step(total_gen_loss)
+        # disc_scheduler.step(total_disc_loss)
+        # total_gen_loss, total_disc_loss = 0, 0
 
 
 def evaluate(generator, discriminator, context_tensor, target_sentence, dataloader):
@@ -200,12 +303,12 @@ def evaluate(generator, discriminator, context_tensor, target_sentence, dataload
         target_sentence = torch.unsqueeze(target_sentence, dim=0)
 
         # Determine the discriminator outputs for both the true and the generated reply
-        _, disc_out_gen = discriminator(context_tensor, generator_output, true_sample=False)
-        _, disc_out_true = discriminator(context_tensor, target_sentence, true_sample=True)
+        gen_disc_loss, gen_word_level_rewards, gen_sent_level_rewards = discriminator(context_tensor, generator_output, true_sample=False)
+        true_disc_loss, true_word_level_rewards, true_sent_level_rewards = discriminator(context_tensor, target_sentence, true_sample=True)
 
         # Find the mean of these values (discriminator output is a probability per word in the reply)
-        mean_disc_out_gen = torch.mean(disc_out_gen).item()
-        mean_disc_out_true = torch.mean(disc_out_true).item()
+        mean_disc_gen_reward = torch.mean(gen_sent_level_rewards).item()
+        mean_disc_true_reward = torch.mean(true_sent_level_rewards).item()
         
         # Convert the tensors to readable sentences
         real_context = dataloader.dataset.vocabulary.list_to_sent(np.array(context_tensor[0]))
@@ -221,7 +324,7 @@ def evaluate(generator, discriminator, context_tensor, target_sentence, dataload
         print('TRUE REPLY')
         print(real_reply)
         print('---------')
-        print('Disc(0): {:3.2f} Disc(1): {:3.2f}'.format(mean_disc_out_gen, mean_disc_out_true))
+        print('Disc(0): {:3.2f} Disc(1): {:3.2f}'.format(mean_disc_gen_reward, mean_disc_true_reward))
         print('______________________________\n\n')
 
 def run_nlgeval(generator, test_dataloader):
@@ -349,7 +452,7 @@ if __name__ == '__main__':
 
 
     # Number of epochs to pretrain the generator and discriminator, before performing adversarial training
-    pre_train_epochs = 5
+    pre_train_epochs = 10
     epoch = 0
     run_training(epoch, generator, discriminator, train_dataloader, test_dataloader, pre_train_epochs, convolutional, gen_optimizer, disc_optimizer)
 

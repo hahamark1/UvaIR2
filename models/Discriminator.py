@@ -42,29 +42,14 @@ class Discriminator(nn.Module):
 			decoder_output, decoder_hidden, _ = self.decoder.forward(decoder_input, decoder_hidden, encoder_outputs)
 			decoder_output = self.sigmoid(decoder_output).squeeze(dim=1)
 			decoder_outputs[:, di] = decoder_output
-
-		# Interpret the decoder output as probabilities per word in the vocabulary, 
-		# and select the probabilities of the words in the given generated/true reply
-		# out_probabilities = torch.zeros(input_tensor.shape, device=DEVICE)
-		# for batch in range(decoder_outputs.shape[0]):
-		# 	for word in range(decoder_outputs.shape[1]):
-		# 		out_probabilities[batch, word] = decoder_outputs[batch, word, input_tensor[batch, word].item()]
 		
-		avg_reward = torch.mean(decoder_outputs, dim=1)
-		avg_batch_reward = torch.mean(avg_reward, dim=0)
-		print('reward', avg_batch_reward)
-		# target = torch.tensor([int(true_sample)], device=DEVICE)
+		word_level_rewards = decoder_outputs
+		sent_level_rewards = torch.mean(word_level_rewards, dim=1)
+		avg_batch_reward = torch.mean(sent_level_rewards, dim=0)
 
-		# loss = self.loss_fnc(avg_batch_reward, target)
+		target = torch.tensor([int(true_sample)], device=DEVICE).float()
 
-		# # Create a target tensor of either zeros or ones depending whether the reply is true or generated
-		# target = torch.ones(input_tensor.shape, device=DEVICE) * int(true_sample)
-
-		# # Compute a loss value using the selected probabilities and the target tensor
-		# print('decoder_outputs', decoder_outputs.shape, 'target', target.shape)
-		# loss = self.loss_fnc(decoder_outputs, target)
-
-		# print('loss', loss)
-
+		# Compute a loss value using the average reward and the target tensor
+		loss = self.loss_fnc(avg_batch_reward, target)
 		
-		return loss, out_probabilities
+		return loss, word_level_rewards, sent_level_rewards
