@@ -2,7 +2,7 @@ import torch
 import os
 
 MAX_WORDS_encoder = 150
-MAX_WORDS_GEN = 30
+MAX_WORDS_GEN = 8
 
 # Cuda constants
 DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'

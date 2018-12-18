@@ -10,7 +10,6 @@ class Discriminator(nn.Module):
 
 		self.encoder = encoder
 		self.decoder = decoder
-		self.loss_fnc = nn.MSELoss()
 		self.vocab_size = vocab_size
 		self.sigmoid = nn.Sigmoid()
 		self.num_layers = num_layers
@@ -21,7 +20,7 @@ class Discriminator(nn.Module):
 		original_input_length = input_tensor.shape[1]
 
 		# Use the context as input for the encoder
-		encoder_input = context_tensor
+		encoder_input = input_tensor
 		encoder_input_length = encoder_input.shape[1]
 
 		encoder_hidden = self.encoder.initHidden(batch_size=batch_size, num_layers=self.num_layers)
@@ -40,16 +39,17 @@ class Discriminator(nn.Module):
 		# Perform the decoder steps for as many steps as there are words in the given generated/true reply
 		for di in range(original_input_length):
 			decoder_output, decoder_hidden, _ = self.decoder.forward(decoder_input, decoder_hidden, encoder_outputs)
-			decoder_output = self.sigmoid(decoder_output).squeeze(dim=1)
-			decoder_outputs[:, di] = decoder_output
+			decoder_output = self.sigmoid(decoder_output)
+			decoder_outputs[:, di] = decoder_output.squeeze(dim=1)
 		
-		word_level_rewards = decoder_outputs
+		word_level_rewards = -torch.log(decoder_outputs)
 		sent_level_rewards = torch.mean(word_level_rewards, dim=1)
 		avg_batch_reward = torch.mean(sent_level_rewards, dim=0)
 
-		target = torch.tensor([int(true_sample)], device=DEVICE).float()
-
 		# Compute a loss value using the average reward and the target tensor
-		loss = self.loss_fnc(avg_batch_reward, target)
+		if true_sample:
+			loss = -avg_batch_reward
+		else:
+			loss = avg_batch_reward
 		
 		return loss, word_level_rewards, sent_level_rewards
