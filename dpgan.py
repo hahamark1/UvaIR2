@@ -30,7 +30,7 @@ from collections import defaultdict
 nlgeval = NLGEval()
 
 
-NUM_EPOCHS = 1000
+NUM_EPOCHS = 70
 PRINT_EVERY = 50
 EVALUATE_EVERY = 300
 SAVE_EVERY = 300
@@ -114,15 +114,10 @@ def print_info(total_gen_loss, total_disc_loss, epoch, iteration):
                             epoch, iteration, avg_gen_loss, avg_disc_loss))
 
 
-def run_training(generator, discriminator, train_dataloader, test_dataloader, pre_train_epochs, convolutional):
-
-    gen_optimizer = optim.RMSprop(generator.parameters(), lr=GEN_LEARNING_RATE)
-    disc_optimizer = optim.RMSprop(discriminator.parameters(), lr=DISC_LEARNING_RATE)
+def run_training(start_epoch, generator, discriminator, train_dataloader, test_dataloader, pre_train_epochs, convolutional, gen_optimizer, disc_optimizer, gen_scheduler, disc_scheduler):
+    
     adverserial_loss = nn.BCELoss()
-    gen_scheduler = optim.lr_scheduler.ReduceLROnPlateau(gen_optimizer, factor=0.2, patience=3, threshold=0.5, min_lr=1e-4,
-                                                     verbose=True)
-    disc_scheduler = optim.lr_scheduler.ReduceLROnPlateau(disc_optimizer, factor=0.2, patience=3, threshold=0.5, min_lr=1e-4,
-                                                     verbose=True)
+    
 
     total_gen_loss = 0
     total_disc_loss = 0
@@ -130,6 +125,8 @@ def run_training(generator, discriminator, train_dataloader, test_dataloader, pr
     metrics_dict = defaultdict(list)
 
     for epoch in range(NUM_EPOCHS + pre_train_epochs):
+        if epoch < start_epoch:
+            continue
 
         pretrain = epoch < pre_train_epochs
 
@@ -172,14 +169,14 @@ def run_training(generator, discriminator, train_dataloader, test_dataloader, pr
                     'model': generator,
                     'state_dict': generator.state_dict(),
                     'optimizer' : gen_optimizer.state_dict(),
-                }, os.path.join('saved_models', 'dp_gan_generator_{}.pt'.format('convolutional' if convolutional else 'recurrent')))
+                }, os.path.join('saved_models', 'dp_gan_generator_{}2.pt'.format('convolutional' if convolutional else 'recurrent')))
 
                 torch.save({
                     'epoch': epoch,
                     'model': discriminator,
                     'state_dict': discriminator.state_dict(),
                     'optimizer' : disc_optimizer.state_dict(),
-                }, os.path.join('saved_models', 'dp_gan_discriminator_{}.pt'.format('convolutional' if convolutional else 'recurrent')))
+                }, os.path.join('saved_models', 'dp_gan_discriminator_{}2.pt'.format('convolutional' if convolutional else 'recurrent')))
 
         d = run_nlgeval(generator, test_dataloader)
         for key, value in d.items():
@@ -247,14 +244,21 @@ def run_nlgeval(generator, test_dataloader):
         batch_size = input_tensor.shape[0]
         input_length = input_tensor.shape[1]
 
+        target_length = target_tensor.shape[1]
+        encoder_hidden = encoder.initHidden(batch_size=batch_size, num_layers=NUM_LAYERS)
+
         encoder_outputs = torch.zeros(MAX_LENGTH, batch_size, encoder.hidden_size, device=DEVICE)
-        encoder_hidden = encoder.forward(input_tensor).transpose(0, 1)
+
+        loss = 0
 
         for ei in range(input_length):
-            encoder_outputs[ei + (MAX_LENGTH - input_length), :, :] = encoder_hidden[ei, :, :]
+            encoder_output, encoder_hidden = encoder(
+                input_tensor[:, ei], encoder_hidden)
+            encoder_outputs[ei + MAX_LENGTH - input_length, :, :] = encoder_output[0, :, :]
+
 
         decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).transpose(0, 1)
-        decoder_hidden = encoder_hidden[-1, :, :].unsqueeze(0)
+        decoder_hidden = encoder_hidden
 
         decoded_words = []
 
@@ -297,7 +301,7 @@ def load_dataset():
 
 if __name__ == '__main__':
 
-    convolutional = True
+    convolutional = False
 
     dd_loader, train_dataloader, test_dataloader = load_dataset()
 
@@ -323,18 +327,33 @@ if __name__ == '__main__':
         # Initialize the discriminator
         disc_encoder = EncoderRNN(vocab_size, HIDDEN_SIZE, num_layers=NUM_LAYERS, LSTM='GRU')
         disc_decoder = DecoderRNN(HIDDEN_SIZE, vocab_size, num_layers=NUM_LAYERS, LSTM='GRU')
-        discriminator = Discriminator(disc_encoder, disc_decoder, HIDDEN_SIZE, vocab_size).to(DEVICE)
+        discriminator = Discriminator(disc_encoder, disc_decoder, HIDDEN_SIZE, vocab_size, NUM_LAYERS).to(DEVICE)
 
+    gen_optimizer = optim.RMSprop(generator.parameters(), lr=GEN_LEARNING_RATE)
+    disc_optimizer = optim.RMSprop(discriminator.parameters(), lr=DISC_LEARNING_RATE)
+
+    gen_scheduler = optim.lr_scheduler.ReduceLROnPlateau(gen_optimizer, factor=0.2, patience=3, threshold=0.5, min_lr=1e-4,
+                                                     verbose=True)
+    disc_scheduler = optim.lr_scheduler.ReduceLROnPlateau(disc_optimizer, factor=0.2, patience=3, threshold=0.5, min_lr=1e-4,
+                                                     verbose=True)
+
+    # saved_gen = torch.load('saved_models/dp_gan_generator_recurrent1.pt')
+    # saved_disc = torch.load('saved_models/dp_gan_discriminator_recurrent1.pt')
+    # generator.load_state_dict(saved_gen['state_dict'])
+    # discriminator.load_state_dict(saved_disc['state_dict'])
+
+    # gen_optimizer.load_state_dict(saved_gen['optimizer'])
+    # disc_optimizer.load_state_dict(saved_disc['optimizer'])
+
+    # epoch = saved_gen['epoch']
 
 
     # Number of epochs to pretrain the generator and discriminator, before performing adversarial training
     pre_train_epochs = 5
-    run_training(generator, discriminator, train_dataloader, test_dataloader, pre_train_epochs, convolutional)
+    epoch = 0
+    run_training(epoch, generator, discriminator, train_dataloader, test_dataloader, pre_train_epochs, convolutional, gen_optimizer, disc_optimizer, gen_scheduler, disc_scheduler)
 
-    # saved_gen = torch.load('saved_models/dp_gan_generator.pt')
-    # saved_disc = torch.load('saved_models/dp_gan_discriminator.pt')
-    # generator.load_state_dict(saved_gen['state_dict'])
-    # discriminator.load_state_dict(saved_disc['state_dict'])
+    
 
     # avg_score = evaluate_test_set(generator, train_dataloader, test_dataloader, max_length=MAX_LENGTH)
     # print('avg blue score:', avg_score)
