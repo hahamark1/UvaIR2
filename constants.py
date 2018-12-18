@@ -27,7 +27,7 @@ PATH_TO_TEST_DATA = 'data/dailydialog/test/dialogues_test.txt'
 PADDING_TOKEN = '__PADDING__'
 PADDING_INDEX = 0
 
-SPLIT_TOKEN = '__SU__'loss
+SPLIT_TOKEN = '__SU__'
 SPLIT_INDEX = 1
 
 UNK_TOKEN = '__UNK__'

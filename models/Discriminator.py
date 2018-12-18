@@ -10,7 +10,7 @@ class Discriminator(nn.Module):
 
 		self.encoder = encoder
 		self.decoder = decoder
-		self.loss_fnc = nn.BCELoss()
+		self.loss_fnc = nn.MSELoss()
 		self.vocab_size = vocab_size
 		self.sigmoid = nn.Sigmoid()
 		self.num_layers = num_layers
@@ -40,23 +40,31 @@ class Discriminator(nn.Module):
 		# Perform the decoder steps for as many steps as there are words in the given generated/true reply
 		for di in range(original_input_length):
 			decoder_output, decoder_hidden, _ = self.decoder.forward(decoder_input, decoder_hidden, encoder_outputs)
-			decoder_output = self.sigmoid(decoder_output)
+			decoder_output = self.sigmoid(decoder_output).squeeze(dim=1)
 			decoder_outputs[:, di] = decoder_output
-
-		print('dec out', decoder_outputs)
-		sdfdf
 
 		# Interpret the decoder output as probabilities per word in the vocabulary, 
 		# and select the probabilities of the words in the given generated/true reply
-		out_probabilities = torch.zeros(input_tensor.shape, device=DEVICE)
-		for batch in range(decoder_outputs.shape[0]):
-			for word in range(decoder_outputs.shape[1]):
-				out_probabilities[batch, word] = decoder_outputs[batch, word, input_tensor[batch, word].item()]
+		# out_probabilities = torch.zeros(input_tensor.shape, device=DEVICE)
+		# for batch in range(decoder_outputs.shape[0]):
+		# 	for word in range(decoder_outputs.shape[1]):
+		# 		out_probabilities[batch, word] = decoder_outputs[batch, word, input_tensor[batch, word].item()]
+		
+		avg_reward = torch.mean(decoder_outputs, dim=1)
+		avg_batch_reward = torch.mean(avg_reward, dim=0)
+		print('reward', avg_batch_reward)
+		# target = torch.tensor([int(true_sample)], device=DEVICE)
 
-		# Create a target tensor of either zeros or ones depending whether the reply is true or generated
-		target = torch.ones(input_tensor.shape, device=DEVICE) * int(true_sample)
+		# loss = self.loss_fnc(avg_batch_reward, target)
 
-		# Compute a loss value using the selected probabilities and the target tensor
-		loss = self.loss_fnc(out_probabilities, target)
+		# # Create a target tensor of either zeros or ones depending whether the reply is true or generated
+		# target = torch.ones(input_tensor.shape, device=DEVICE) * int(true_sample)
+
+		# # Compute a loss value using the selected probabilities and the target tensor
+		# print('decoder_outputs', decoder_outputs.shape, 'target', target.shape)
+		# loss = self.loss_fnc(decoder_outputs, target)
+
+		# print('loss', loss)
+		sdfsf
 		
 		return loss, out_probabilities

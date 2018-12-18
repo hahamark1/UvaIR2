@@ -27,7 +27,7 @@ from torch.utils.data import Dataset, DataLoader
 import os
 from nlgeval import NLGEval
 from collections import defaultdict
-nlgeval = NLGEval()
+# nlgeval = NLGEval()
 
 
 NUM_EPOCHS = 70
@@ -36,8 +36,8 @@ EVALUATE_EVERY = 300
 SAVE_EVERY = 300
 TRAIN_GENERATOR_EVERY = 5
 
-GEN_LEARNING_RATE = 0.01
-DISC_LEARNING_RATE = 0.01
+GEN_LEARNING_RATE = 0.001
+DISC_LEARNING_RATE = 0.001
 
 PATH_TO_TRAIN_DATA =  'data/dailydialog/train/dialogues_train.txt'
 PATH_TO_TEST_DATA =  'data/dailydialog/test/dialogues_test.txt'
@@ -114,7 +114,7 @@ def print_info(total_gen_loss, total_disc_loss, epoch, iteration):
                             epoch, iteration, avg_gen_loss, avg_disc_loss))
 
 
-def run_training(start_epoch, generator, discriminator, train_dataloader, test_dataloader, pre_train_epochs, convolutional, gen_optimizer, disc_optimizer, gen_scheduler, disc_scheduler):
+def run_training(start_epoch, generator, discriminator, train_dataloader, test_dataloader, pre_train_epochs, convolutional, gen_optimizer, disc_optimizer):
     
     adverserial_loss = nn.BCELoss()
     
@@ -351,7 +351,7 @@ if __name__ == '__main__':
     # Number of epochs to pretrain the generator and discriminator, before performing adversarial training
     pre_train_epochs = 5
     epoch = 0
-    run_training(epoch, generator, discriminator, train_dataloader, test_dataloader, pre_train_epochs, convolutional, gen_optimizer, disc_optimizer, gen_scheduler, disc_scheduler)
+    run_training(epoch, generator, discriminator, train_dataloader, test_dataloader, pre_train_epochs, convolutional, gen_optimizer, disc_optimizer)
 
     
 
