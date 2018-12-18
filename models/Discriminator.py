@@ -65,6 +65,6 @@ class Discriminator(nn.Module):
 		# loss = self.loss_fnc(decoder_outputs, target)
 
 		# print('loss', loss)
-		sdfsf
+
 		
 		return loss, out_probabilities

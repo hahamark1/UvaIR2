@@ -315,7 +315,7 @@ if __name__ == '__main__':
 
         # Initialize the discriminator
         disc_encoder = FConvEncoder(vocab_size, HIDDEN_SIZE)
-        disc_decoder = DecoderRNN(HIDDEN_SIZE, vocab_size, num_layers=NUM_LAYERS, LSTM='GRU')
+        disc_decoder = DecoderRNN(HIDDEN_SIZE, vocab_size, vocab_size, num_layers=NUM_LAYERS, LSTM='GRU')
         discriminator = ConvDiscriminator(disc_encoder, disc_decoder, vocab_size, num_layers=NUM_LAYERS).to(DEVICE)
 
     else:
@@ -326,7 +326,7 @@ if __name__ == '__main__':
 
         # Initialize the discriminator
         disc_encoder = EncoderRNN(vocab_size, HIDDEN_SIZE, num_layers=NUM_LAYERS, LSTM='GRU')
-        disc_decoder = DecoderRNN(HIDDEN_SIZE, 1, num_layers=NUM_LAYERS, LSTM='GRU')
+        disc_decoder = DecoderRNN(HIDDEN_SIZE, vocab_size, 1, num_layers=NUM_LAYERS, LSTM='GRU')
         discriminator = Discriminator(disc_encoder, disc_decoder, HIDDEN_SIZE, vocab_size, NUM_LAYERS).to(DEVICE)
 
     gen_optimizer = optim.RMSprop(generator.parameters(), lr=GEN_LEARNING_RATE)
