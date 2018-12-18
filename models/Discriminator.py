@@ -35,13 +35,16 @@ class Discriminator(nn.Module):
 		# Initialize the decoder input and hidden state, and an empty tensor to store the output values
 		decoder_input = torch.tensor([[SOS_INDEX] * batch_size], device=DEVICE).view(batch_size, 1)
 		decoder_hidden = encoder_hidden
-		decoder_outputs = torch.zeros(batch_size, original_input_length, self.vocab_size, device=DEVICE)
+		decoder_outputs = torch.zeros(batch_size, original_input_length, device=DEVICE)
 
 		# Perform the decoder steps for as many steps as there are words in the given generated/true reply
 		for di in range(original_input_length):
 			decoder_output, decoder_hidden, _ = self.decoder.forward(decoder_input, decoder_hidden, encoder_outputs)
 			decoder_output = self.sigmoid(decoder_output)
-			decoder_outputs[:, di, :] = decoder_output
+			decoder_outputs[:, di] = decoder_output
+
+		print('dec out', decoder_outputs)
+		sdfdf
 
 		# Interpret the decoder output as probabilities per word in the vocabulary, 
 		# and select the probabilities of the words in the given generated/true reply

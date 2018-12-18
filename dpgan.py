@@ -326,16 +326,16 @@ if __name__ == '__main__':
 
         # Initialize the discriminator
         disc_encoder = EncoderRNN(vocab_size, HIDDEN_SIZE, num_layers=NUM_LAYERS, LSTM='GRU')
-        disc_decoder = DecoderRNN(HIDDEN_SIZE, vocab_size, num_layers=NUM_LAYERS, LSTM='GRU')
+        disc_decoder = DecoderRNN(HIDDEN_SIZE, 1, num_layers=NUM_LAYERS, LSTM='GRU')
         discriminator = Discriminator(disc_encoder, disc_decoder, HIDDEN_SIZE, vocab_size, NUM_LAYERS).to(DEVICE)
 
     gen_optimizer = optim.RMSprop(generator.parameters(), lr=GEN_LEARNING_RATE)
     disc_optimizer = optim.RMSprop(discriminator.parameters(), lr=DISC_LEARNING_RATE)
 
-    gen_scheduler = optim.lr_scheduler.ReduceLROnPlateau(gen_optimizer, factor=0.2, patience=3, threshold=0.5, min_lr=1e-4,
-                                                     verbose=True)
-    disc_scheduler = optim.lr_scheduler.ReduceLROnPlateau(disc_optimizer, factor=0.2, patience=3, threshold=0.5, min_lr=1e-4,
-                                                     verbose=True)
+    # gen_scheduler = optim.lr_scheduler.ReduceLROnPlateau(gen_optimizer, factor=0.2, patience=3, threshold=0.5, min_lr=1e-4,
+    #                                                  verbose=True)
+    # disc_scheduler = optim.lr_scheduler.ReduceLROnPlateau(disc_optimizer, factor=0.2, patience=3, threshold=0.5, min_lr=1e-4,
+    #                                                  verbose=True)
 
     # saved_gen = torch.load('saved_models/dp_gan_generator_recurrent1.pt')
     # saved_disc = torch.load('saved_models/dp_gan_discriminator_recurrent1.pt')
