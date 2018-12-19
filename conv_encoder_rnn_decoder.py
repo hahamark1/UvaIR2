@@ -186,7 +186,8 @@ def run_nlgeval(generator, test_dataloader):
             encoder_outputs[ei + (MAX_LENGTH - input_length), :, :] = encoder_hidden[ei, :, :]
 
         decoder_input = torch.tensor([[SOS_INDEX]], device=DEVICE).transpose(0, 1)
-        decoder_hidden = encoder_hidden[-1, :, :].unsqueeze(0)
+        decoder_hidden = encoder_hidden[-1, :, :]
+        decoder_hidden = torch.stack([decoder_hidden] * NUM_LAYERS, 0)
 
         decoded_words = []
 

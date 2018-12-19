@@ -101,14 +101,14 @@ class FConvEncoder(nn.Module):
                 x = F.pad(x, (0, 0, 0, 0, padding_l, padding_r))
                 x = conv(x)
 
-            x = norm(x)
-
             # x = F.glu(x, dim=2)
             x = F.glu(x, dim=1)
 
             if residual is not None:
                 x = (x + residual) * math.sqrt(0.5)
             residuals.append(x)
+
+            x = norm(x)
 
         # T x B x C -> B x T x C
         # x = x.transpose(1, 0)
