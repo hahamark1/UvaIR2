@@ -9,7 +9,7 @@ from constants import *
 from dataloader.DailyDialogLoader import DailyDialogLoader, PadCollate
 from torch.utils.data import DataLoader
 import os
-from utils.seq2seq_helper_funcs import plot_epoch_loss, plot_data
+from utils.seq2seq_helper_funcs import plot_epoch_loss, plot_data, plot_average_blue_score
 from nlgeval import NLGEval
 from collections import defaultdict
 nlgeval = NLGEval()
@@ -112,6 +112,8 @@ def trainIters(generator, train_dataloader, test_dataloader, num_epochs=EPOCHS, 
         for key, value in d.items():
             metrics_dict[key].append(value)
             plot_data(metrics_dict[key], key)
+
+        plot_average_blue_score(metrics_dict)
 
         print('After epoch {} the metrics dict is: {}'.format(epoch, metrics_dict))
 

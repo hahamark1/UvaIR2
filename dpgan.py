@@ -18,7 +18,7 @@ from models.ConvolutionalDiscriminator import ConvDiscriminator
 from evaluation.BlueEvaluator import BlueEvaluator
 import random
 import time
-from utils.seq2seq_helper_funcs import showPlot, asMinutes, timeSince, plot_data
+from utils.seq2seq_helper_funcs import showPlot, asMinutes, timeSince, plot_data, plot_average_blue_score
 import torch.optim as optim
 import torch.nn as nn
 from constants import *
@@ -182,6 +182,8 @@ def run_training(start_epoch, generator, discriminator, train_dataloader, test_d
         for key, value in d.items():
             metrics_dict[key].append(value)
             plot_data(metrics_dict[key], key)
+
+        plot_average_blue_score(metrics_dict)
 
         gen_scheduler.step(total_gen_loss)
         disc_scheduler.step(total_disc_loss)

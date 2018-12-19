@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 plt.switch_backend('agg')
 import matplotlib.ticker as ticker
 from constants import *
+import numpy as np
 
 SOS_token = 0
 EOS_token = 1
@@ -67,6 +68,22 @@ def plot_data(data, title=''):
     plt.ylabel('{}'.format(title), fontsize=17)
 
     plt.savefig(os.path.join('figures', '{}_{}.png'.format(title, MAX_LENGTH)))
+    plt.close()
+
+def plot_average_blue_score(metrics_dict):
+
+    plt.figure()
+    blue_1 = metrics_dict['Blue_1']
+    blue_2 = np.array(metrics_dict['Blue_2'])
+    blue_3 = np.array(metrics_dict['Blue_3'])
+    blue_4 = np.array(metrics_dict['Blue_4'])
+    average_blue = (blue_1 + blue_2 + blue_3 + blue_4 ) / 4.0
+    plt.plot(average_blue)
+    plt.title('Average blue score over epochs', fontsize=17)
+    plt.xlabel('Epochs', fontsize=17)
+    plt.ylabel('Average blue score', fontsize=17)
+
+    plt.savefig(os.path.join('figures', 'average_blue_score.png'))
     plt.close()
 
 
