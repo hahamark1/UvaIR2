@@ -24,7 +24,7 @@ class FConvEncoder(nn.Module):
         self.embed_tokens.weight[0].data.zero_()
 
         convolutions = extend_conv_spec(convolutions)
-        print(convolutions)
+
         self.hidden_size = convolutions[-1][0]
 
         in_channels = convolutions[0][0]

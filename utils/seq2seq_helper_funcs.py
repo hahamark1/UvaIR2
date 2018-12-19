@@ -73,11 +73,12 @@ def plot_data(data, title=''):
 def plot_average_blue_score(metrics_dict):
 
     plt.figure()
-    blue_1 = np.array(metrics_dict['Blue_1'])
-    blue_2 = np.array(metrics_dict['Blue_2'])
+    blue_1 = np.array(metrics_dict['Bleu_1'])
+    blue_2 = np.array(metrics_dict['Bleu_2'])
     blue_3 = np.array(metrics_dict['Bleu_3'])
     blue_4 = np.array(metrics_dict['Bleu_4'])
-    average_blue = (blue_1 + blue_2 + blue_3 + blue_4 ) / 4.0
+    print(blue_1, blue_2, blue_3, blue_4)
+    average_blue = blue_1 + blue_2 + blue_3 + blue_4
     plt.plot(average_blue)
     plt.title('Average blue score over epochs', fontsize=17)
     plt.xlabel('Epochs', fontsize=17)
