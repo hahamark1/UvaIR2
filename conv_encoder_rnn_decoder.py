@@ -47,11 +47,11 @@ def train(input_tensor, target_tensor, generator, optimizer):
 
 
 def trainIters(generator, train_dataloader, test_dataloader, num_epochs=3000, print_every=500,
-               evaluate_every=500, save_every=1000, learning_rate=0.25):
+               evaluate_every=250, save_every=1000, learning_rate=0.25):
 
     # optimizer = optim.RMSprop(generator.parameters(), lr=learning_rate)
     optimizer = optim.SGD(generator.parameters(), lr=learning_rate, momentum=0.99, nesterov=True)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=3, threshold=0.5, min_lr=1e-4, verbose=True)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=3, threshold=0.05, min_lr=1e-4, verbose=True)
 
     num_iters = len(train_dataloader)
     iter = 0

@@ -24,6 +24,7 @@ class FConvEncoder(nn.Module):
         self.embed_tokens.weight[0].data.zero_()
 
         convolutions = extend_conv_spec(convolutions)
+        print(convolutions)
         self.hidden_size = convolutions[-1][0]
 
         in_channels = convolutions[0][0]
@@ -150,7 +151,7 @@ if __name__ == '__main__':
     vocab_size = 399
     sequence_length = 40
     input_ = torch.empty(batch_size, sequence_length).random_(0, vocab_size).type(torch.LongTensor)
-    ConvEncoder = FConvEncoder(vocab_size)
+    ConvEncoder = FConvEncoder(vocab_size, 256)
     print(input_.shape)
 
     output = ConvEncoder.forward(input_)
