@@ -56,7 +56,7 @@ class FConvEncoder(nn.Module):
                 nn.Conv1d(in_channels, out_channels * 2, kernel_size, padding=padding)
             )
 
-            self.batch_norms.append(nn.BatchNorm1d(out_channels * 2))
+            self.batch_norms.append(nn.BatchNorm1d(out_channels))
 
             self.residuals.append(residual)
             in_channels = out_channels
@@ -105,7 +105,7 @@ class FConvEncoder(nn.Module):
             x = F.glu(x, dim=1)
 
             if residual is not None:
-                x = (x + residual) * math.sqrt(0.5)
+                x = (x + residual) # * math.sqrt(0.5)
             residuals.append(x)
 
             x = norm(x)
