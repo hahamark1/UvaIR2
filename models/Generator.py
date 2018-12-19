@@ -4,7 +4,7 @@ import random
 
 
 class Generator(nn.Module):
-    def __init__(self, encoder, decoder, LSTM='LSTM', num_layers=1, max_length=MAX_LENGTH, criterion=nn.NLLLoss()):
+    def __init__(self, encoder, decoder, LSTM='GRU', num_layers=NUM_LAYERS, max_length=MAX_LENGTH, criterion=nn.NLLLoss()):
         super(Generator, self).__init__()
         self.encoder = encoder
         self.decoder = decoder
