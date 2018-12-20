@@ -31,18 +31,38 @@ class Discriminator(nn.Module):
 			encoder_output, encoder_hidden = self.encoder(encoder_input[:, ei], encoder_hidden)
 			encoder_outputs[ei, :, :] = encoder_output[0, :, :]
 
+		# # Initialize the decoder input and hidden state, and an empty tensor to store the output values
+		# decoder_input = torch.tensor([[SOS_INDEX] * batch_size], device=DEVICE).view(batch_size, 1)
+		# decoder_hidden = encoder_hidden
+		# decoder_outputs = torch.zeros(batch_size, original_input_length, device=DEVICE)
+
+		# # Perform the decoder steps for as many steps as there are words in the given generated/true reply
+		# for di in range(original_input_length):
+		# 	decoder_output, decoder_hidden, _ = self.decoder.forward(decoder_input, decoder_hidden, encoder_outputs)
+		# 	# decoder_output = self.sigmoid(decoder_output)
+		# 	decoder_output - decoder_output[target_index]
+		# 	decoder_outputs[:, di] = decoder_output.squeeze(dim=1)
+
 		# Initialize the decoder input and hidden state, and an empty tensor to store the output values
 		decoder_input = torch.tensor([[SOS_INDEX] * batch_size], device=DEVICE).view(batch_size, 1)
 		decoder_hidden = encoder_hidden
-		decoder_outputs = torch.zeros(batch_size, original_input_length, device=DEVICE)
+		decoder_outputs = torch.zeros(batch_size, original_input_length, self.vocab_size, device=DEVICE)
 
 		# Perform the decoder steps for as many steps as there are words in the given generated/true reply
 		for di in range(original_input_length):
 			decoder_output, decoder_hidden, _ = self.decoder.forward(decoder_input, decoder_hidden, encoder_outputs)
-			decoder_output = self.sigmoid(decoder_output)
-			decoder_outputs[:, di] = decoder_output.squeeze(dim=1)
-		
-		word_level_rewards = -torch.log(decoder_outputs)
+			# decoder_output = self.sigmoid(decoder_output)
+			decoder_outputs[:, di, :] = decoder_output
+
+		# Interpret the decoder output as probabilities per word in the vocabulary, 
+		# and select the probabilities of the words in the given generated/true reply
+		out_probabilities = torch.zeros(input_tensor.shape, device=DEVICE)
+		for batch in range(decoder_outputs.shape[0]):
+			for word in range(decoder_outputs.shape[1]):
+				out_probabilities[batch, word] = decoder_outputs[batch, word, input_tensor[batch, word].item()]
+
+		# word_level_rewards = -torch.log(out_probabilities)
+		word_level_rewards = out_probabilities
 		sent_level_rewards = torch.mean(word_level_rewards, dim=1)
 		avg_batch_reward = torch.mean(sent_level_rewards, dim=0)
 

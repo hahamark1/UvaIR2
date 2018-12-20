@@ -64,6 +64,7 @@ class AttnDecoderRNN(nn.Module):
         output, hidden = self.gru(output, hidden.contiguous())
 
         output = self.out(output)
+        output = self.log_softmax(output)
         output = output.squeeze(0)
 
         return output, hidden, attn_weights

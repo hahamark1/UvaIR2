@@ -26,6 +26,7 @@ class DecoderRNN(nn.Module):
         output = self.relu(output)
         output, hidden = self.gru(output, hidden)
         output = self.out(output[0])
+        output = self.softmax(output)
         return output, hidden, None
 
     def initHidden(self):
