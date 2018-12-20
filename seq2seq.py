@@ -23,6 +23,7 @@ def train(input_tensor, target_tensor, generator, optimizer):
     optimizer.zero_grad()
     loss, _ = generator(input_tensor, target_tensor)
     loss.backward()
+    nn.utils.clip_grad_norm_(generator.parameters(), max_norm=0.1)
     optimizer.step()
     target_length = target_tensor.shape[1]
 
@@ -46,11 +47,10 @@ def load_dataset(reversed=False):
 
 
 def trainIters(generator, train_dataloader, test_dataloader, num_epochs=EPOCHS, print_every=100,
-               evaluate_every=500, save_every=500, learning_rate=0.01):
+               evaluate_every=500, save_every=500, learning_rate=0.25):
 
-    optimizer = optim.RMSprop(generator.parameters(), lr=learning_rate)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=3, threshold=0.05, min_lr=1e-4,
-                                                     verbose=True)
+    optimizer = optim.SGD(generator.parameters(), lr=learning_rate, momentum=0.99, nesterov=True)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=3, threshold=0.05, min_lr=1e-4, verbose=True)
 
     num_iters = len(train_dataloader)
     iter = 0
@@ -204,6 +204,13 @@ def run_nlgeval(generator, test_dataloader):
         references.append([target_sent])
         hypothesis.append(corpus.list_to_sent(decoded_words))
 
+        print(corpus.tokens_to_sent(input_tensor.view(-1)))
+        print('>>')
+        print(corpus.list_to_sent(decoded_words))
+        print('==')
+        print(target_sent)
+        print('-----------------------------')
+
     metrics_dict = nlgeval.compute_metrics(references, hypothesis)
 
     generator.train()
@@ -233,5 +240,7 @@ if __name__ == '__main__':
                               criterion=nn.CrossEntropyLoss(ignore_index=0, size_average=False)).to(DEVICE)
 
     print('Training the model with a max length of: {}'.format(MAX_UTTERENCE_LENGTH))
+
+    # run_nlgeval(generator, test_dataloader)
 
     trainIters(generator, train_dataloader, test_dataloader, save_every=50)
