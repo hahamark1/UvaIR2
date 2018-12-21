@@ -6,7 +6,6 @@ MAX_WORDS_GEN = 30
 
 # Cuda constants
 DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-# DEVICE = 'cpu'
 
 MAX_UTTERENCE_LENGTH = 30
 MAX_LENGTH = 30
