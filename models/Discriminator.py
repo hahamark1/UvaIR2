@@ -10,7 +10,6 @@ class Discriminator(nn.Module):
 
 		self.encoder = encoder
 		self.decoder = decoder
-		self.loss_fnc = nn.BCELoss()
 		self.vocab_size = vocab_size
 		self.sigmoid = nn.Sigmoid()
 		self.num_layers = num_layers
@@ -21,7 +20,7 @@ class Discriminator(nn.Module):
 		original_input_length = input_tensor.shape[1]
 
 		# Use the context as input for the encoder
-		encoder_input = context_tensor
+		encoder_input = input_tensor
 		encoder_input_length = encoder_input.shape[1]
 
 		encoder_hidden = self.encoder.initHidden(batch_size=batch_size, num_layers=self.num_layers)
@@ -32,6 +31,18 @@ class Discriminator(nn.Module):
 			encoder_output, encoder_hidden = self.encoder(encoder_input[:, ei], encoder_hidden)
 			encoder_outputs[ei, :, :] = encoder_output[0, :, :]
 
+		# # Initialize the decoder input and hidden state, and an empty tensor to store the output values
+		# decoder_input = torch.tensor([[SOS_INDEX] * batch_size], device=DEVICE).view(batch_size, 1)
+		# decoder_hidden = encoder_hidden
+		# decoder_outputs = torch.zeros(batch_size, original_input_length, device=DEVICE)
+
+		# # Perform the decoder steps for as many steps as there are words in the given generated/true reply
+		# for di in range(original_input_length):
+		# 	decoder_output, decoder_hidden, _ = self.decoder.forward(decoder_input, decoder_hidden, encoder_outputs)
+		# 	# decoder_output = self.sigmoid(decoder_output)
+		# 	decoder_output - decoder_output[target_index]
+		# 	decoder_outputs[:, di] = decoder_output.squeeze(dim=1)
+
 		# Initialize the decoder input and hidden state, and an empty tensor to store the output values
 		decoder_input = torch.tensor([[SOS_INDEX] * batch_size], device=DEVICE).view(batch_size, 1)
 		decoder_hidden = encoder_hidden
@@ -40,7 +51,7 @@ class Discriminator(nn.Module):
 		# Perform the decoder steps for as many steps as there are words in the given generated/true reply
 		for di in range(original_input_length):
 			decoder_output, decoder_hidden, _ = self.decoder.forward(decoder_input, decoder_hidden, encoder_outputs)
-			decoder_output = self.sigmoid(decoder_output)
+			# decoder_output = self.sigmoid(decoder_output)
 			decoder_outputs[:, di, :] = decoder_output
 
 		# Interpret the decoder output as probabilities per word in the vocabulary, 
@@ -50,10 +61,15 @@ class Discriminator(nn.Module):
 			for word in range(decoder_outputs.shape[1]):
 				out_probabilities[batch, word] = decoder_outputs[batch, word, input_tensor[batch, word].item()]
 
-		# Create a target tensor of either zeros or ones depending whether the reply is true or generated
-		target = torch.ones(input_tensor.shape, device=DEVICE) * int(true_sample)
+		# word_level_rewards = -torch.log(out_probabilities)
+		word_level_rewards = out_probabilities
+		sent_level_rewards = torch.mean(word_level_rewards, dim=1)
+		avg_batch_reward = torch.mean(sent_level_rewards, dim=0)
 
-		# Compute a loss value using the selected probabilities and the target tensor
-		loss = self.loss_fnc(out_probabilities, target)
+		# Compute a loss value using the average reward and the target tensor
+		if true_sample:
+			loss = -avg_batch_reward
+		else:
+			loss = avg_batch_reward
 		
-		return loss, out_probabilities
+		return loss, word_level_rewards, sent_level_rewards

@@ -4,11 +4,11 @@ from constants import *
 
 
 class DecoderRNN(nn.Module):
-    def __init__(self, hidden_size, output_size, num_layers=1, LSTM='LSTM'):
+    def __init__(self, hidden_size, vocab_size, output_size, num_layers=1, LSTM='LSTM'):
         super(DecoderRNN, self).__init__()
         self.hidden_size = hidden_size
 
-        self.embedding = nn.Embedding(output_size, hidden_size)
+        self.embedding = nn.Embedding(vocab_size, hidden_size)
         if LSTM == 'LSTM':
             self.gru = nn.LSTM(self.hidden_size, self.hidden_size, num_layers=num_layers)
         elif LSTM == 'GRU':
@@ -26,6 +26,7 @@ class DecoderRNN(nn.Module):
         output = self.relu(output)
         output, hidden = self.gru(output, hidden)
         output = self.out(output[0])
+        output = self.softmax(output)
         return output, hidden, None
 
     def initHidden(self):
